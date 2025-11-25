@@ -1,174 +1,194 @@
-const API_BASE = '/api';
+const API_ORIGIN = import.meta.env?.VITE_API_URL ?? "http://localhost:5059";
+const API_URL = `${API_ORIGIN}/api`;
 
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('jwt_token');
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': token ? `Bearer ${token}` : ''
-  };
+const defaultHeaders = {
+  "Content-Type": "application/json",
 };
 
-const handleResponse = async (response) => {
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error || `HTTP error! status: ${response.status}`);
+export const AUTH_EVENTS = {
+  unauthorized: "auth:unauthorized",
+};
+
+function buildBody(payload) {
+  if (payload === undefined || payload === null) {
+    return undefined;
   }
-  return response.json();
+
+  if (typeof payload === "string") {
+    return payload;
+  }
+
+  return JSON.stringify(payload);
+}
+
+async function parseResponse(response) {
+  const raw = await response.text();
+  let data = null;
+
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch (_) {
+      data = raw;
+    }
+  }
+
+  if (!response.ok) {
+    const message =
+      (data && data.message) ||
+      (typeof data === "string" && data) ||
+      `Ошибка ${response.status}`;
+    const error = new Error(message);
+    error.status = response.status;
+    error.payload = data;
+    throw error;
+  }
+
+  return data;
+}
+
+async function request(path, { method = "GET", body, headers = {} } = {}) {
+  const token = localStorage.getItem("jwt_token");
+  const response = await fetch(`${API_URL}${path}`, {
+    method,
+    credentials: "include",
+    headers: {
+      ...defaultHeaders,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...headers,
+    },
+    body: buildBody(body),
+  });
+
+  if (response.status === 204) return null;
+
+  try {
+    return await parseResponse(response);
+  } catch (error) {
+    if (
+      (error.status === 401 || error.status === 403) &&
+      typeof window !== "undefined"
+    ) {
+      window.dispatchEvent(new Event(AUTH_EVENTS.unauthorized));
+    }
+    throw error;
+  }
+}
+
+export const userService = {
+  register(dto) {
+    return request("/users/register", { method: "POST", body: dto });
+  },
+  login(credentials) {
+    return request("/users/login", {
+      method: "POST",
+      body: credentials
+    });
+  },
+  getById(userId) {
+    return request(`/users/${userId}`);
+  },
 };
 
 export const projectService = {
-  getProjects: () => 
-    fetch(`${API_BASE}/projects`, {
-      headers: getAuthHeaders()
-    }).then(handleResponse),
-
-  createProject: (name) =>
-    fetch(`${API_BASE}/projects`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ name })
-    }).then(handleResponse),
-
-  getProject: (projectId) =>
-    fetch(`${API_BASE}/projects/${projectId}`, {
-      headers: getAuthHeaders()
-    }).then(handleResponse),
-
-  updateProject: (projectId, data) =>
-    fetch(`${API_BASE}/projects/${projectId}`, {
-      method: 'PATCH',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data)
-    }).then(handleResponse),
-
-  deleteProject: (projectId) =>
-    fetch(`${API_BASE}/projects/${projectId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    }).then(handleResponse),
-
-  setRootTask: (projectId, taskId) =>
-    fetch(`${API_BASE}/projects/${projectId}/root?taskId=${taskId}`, {
-      method: 'PATCH',
-      headers: getAuthHeaders()
-    }).then(handleResponse),
-
-  addMember: (projectId, userId) =>
-    fetch(`${API_BASE}/projects/${projectId}/members?userId=${userId}`, {
-      method: 'POST',
-      headers: getAuthHeaders()
-    }).then(handleResponse),
-
-  removeMember: (projectId, userId) =>
-    fetch(`${API_BASE}/projects/${projectId}/members/${userId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    }).then(handleResponse),
-
-  updateMemberRole: (projectId, userId, role) =>
-    fetch(`${API_BASE}/projects/${projectId}/members/${userId}`, {
-      method: 'PATCH',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ role })
-    }).then(handleResponse)
+  list(userId) {
+    const query = userId ? `?userId=${userId}` : "";
+    return request(`/projects${query}`);
+  },
+  create(dto) {
+    return request("/projects", { method: "POST", body: dto });
+  },
+  get(projectId) {
+    return request(`/projects/${projectId}`);
+  },
+  update(projectId, dto) {
+    return request(`/projects/${projectId}`, { method: "PATCH", body: dto });
+  },
+  remove(projectId) {
+    return request(`/projects/${projectId}`, { method: "DELETE" });
+  },
+  setRootTask(projectId, taskId) {
+    return request(`/projects/${projectId}/root?taskId=${taskId}`, {
+      method: "PATCH",
+    });
+  },
+  addMember(projectId, userId) {
+    return request(`/projects/${projectId}/members?userId=${userId}`, {
+      method: "POST",
+    });
+  },
+  removeMember(projectId, userId) {
+    return request(`/projects/${projectId}/members/${userId}`, {
+      method: "DELETE",
+    });
+  },
+  changeMemberRole(projectId, userId, dto) {
+    return request(`/projects/${projectId}/members/${userId}`, {
+      method: "PATCH",
+      body: dto,
+    });
+  },
 };
 
 export const teamService = {
-  createTeam: (teamData) =>
-    fetch(`${API_BASE}/teams`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(teamData)
-    }).then(handleResponse),
-
-  addTeamMember: (teamId, memberId) =>
-    fetch(`${API_BASE}/teams/${teamId}/${memberId}`, {
-      method: 'POST',
-      headers: getAuthHeaders()
-    }).then(handleResponse),
-
-  removeTeamMember: (teamId, memberId) =>
-    fetch(`${API_BASE}/teams/${teamId}/${memberId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    }).then(handleResponse)
+  create(dto) {
+    return request("/teams", { method: "POST", body: dto });
+  },
+  addMember(teamId, memberId) {
+    return request(`/teams/${teamId}/${memberId}`, { method: "POST" });
+  },
+  removeMember(teamId, memberId) {
+    return request(`/teams/${teamId}/${memberId}`, { method: "DELETE" });
+  },
 };
 
 export const taskService = {
-  getTasksByProject: (projectId) =>
-    fetch(`${API_BASE}/tasks?projectId=${projectId}`, {
-      headers: getAuthHeaders()
-    }).then(handleResponse),
-
-  createTask: (taskData) =>
-    fetch(`${API_BASE}/tasks`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(taskData)
-    }).then(handleResponse),
-
-  getTask: (taskId) =>
-    fetch(`${API_BASE}/tasks/${taskId}`, {
-      headers: getAuthHeaders()
-    }).then(handleResponse),
-
-  updateTask: (taskId, taskData) =>
-    fetch(`${API_BASE}/tasks/${taskId}`, {
-      method: 'PATCH',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(taskData)
-    }).then(handleResponse),
-
-  deleteTask: (taskId) =>
-    fetch(`${API_BASE}/tasks/${taskId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    }).then(handleResponse),
-
-  addDependency: (taskId, dependentTaskId) =>
-    fetch(`${API_BASE}/tasks/${taskId}/dependence`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ dependentTaskId })
-    }).then(handleResponse),
-
-  removeDependency: (taskId, dependentTaskId) =>
-    fetch(`${API_BASE}/tasks/${taskId}/dependence`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ dependentTaskId })
-    }).then(handleResponse),
-
-  addPerformer: (taskId, userId) =>
-    fetch(`${API_BASE}/tasks/${taskId}/performers?userId=${userId}`, {
-      method: 'POST',
-      headers: getAuthHeaders()
-    }).then(handleResponse),
-
-  removePerformer: (taskId, userId) =>
-    fetch(`${API_BASE}/tasks/${taskId}/performers?userId=${userId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    }).then(handleResponse)
+  createTask(dto) {
+    return request("/tasks", { method: "POST", body: dto });
+  },
+  getTask(taskId) {
+    return request(`/tasks/${taskId}`);
+  },
+  updateTask(taskId, dto) {
+    return request(`/tasks/${taskId}`, { method: "PATCH", body: dto });
+  },
+  deleteTask(taskId) {
+    return request(`/tasks/${taskId}`, { method: "DELETE" });
+  },
+  addDependency(taskId, dto) {
+    return request(`/tasks/${taskId}/dependence`, {
+      method: "POST",
+      body: {
+        parentId: dto.parentId,
+        childId: dto.childId,
+        type: dto.type,
+      },
+    });
+  },
+  removeDependency(taskId, dto) {
+    return request(`/tasks/${taskId}/dependence`, {
+      method: "DELETE",
+      body: {
+        parentId: dto.parentId,
+        childId: dto.childId,
+        type: dto.type,
+      },
+    });
+  },
+  addPerformer(taskId, userId) {
+    return request(`/tasks/${taskId}/performers?userId=${userId}`, {
+      method: "POST",
+    });
+  },
+  removePerformer(taskId, userId) {
+    return request(`/tasks/${taskId}/performers?userId=${userId}`, {
+      method: "DELETE",
+    });
+  },
 };
 
-export const userService = {
-  register: (userData) =>
-    fetch(`${API_BASE}/users`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(userData)
-    }).then(handleResponse),
-
-  login: (credentials) =>
-    fetch(`${API_BASE}/users`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(credentials)
-    }).then(handleResponse),
-
-  getUser: (userId) =>
-    fetch(`${API_BASE}/users/${userId}`, {
-      headers: getAuthHeaders()
-    }).then(handleResponse)
+const apiClient = {
+  request,
 };
+
+export default apiClient;

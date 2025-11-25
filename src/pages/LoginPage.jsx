@@ -1,6 +1,21 @@
 import { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
+import { userService } from "../services/apiService.js";
+
+function parseJwt(token) {
+  if (!token || typeof token !== "string") return null;
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    return JSON.parse(
+      atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))
+    );
+  } catch (error) {
+    console.warn("Не удалось разобрать JWT", error);
+    return null;
+  }
+}
 
 export default function LoginPage() {
   const { login } = useContext(AuthContext);
@@ -9,25 +24,71 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
+  const fillDemoCredentials = (email) => {
+    setForm({ email, password: "123" });
+  };
+  const bypassAuth = () => {
+    console.log("тест на Api");
+    
+    const mockUserData = {
+      id: "mock-user-id-123",
+      email: "test@test.com",
+      nickname: "Test User"
+    };
+    
+    login(mockUserData, "mock-jwt-token");
+    navigate("/projects");
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setIsLoading(true);
 
-    await new Promise(resolve => setTimeout(resolve, 500));
+    console.log('Начало авторизации...');
+    console.log(' Email:', form.email);
+    console.log('Password length:', form.password.length);
 
-    if (form.password === "123") {
-      login({ email: form.email });
+    try {
+      console.log(' Отправка запроса на сервер...');
+      
+      const credentials = {
+        email: form.email.trim(),
+        password: form.password,
+      };
+      console.log('Данные для отправки:', credentials);
+
+      const token = await userService.login(credentials);
+      console.log('Токен получен:', token ? 'ДА' : 'НЕТ');
+      console.log('Токен содержимое:', token);
+
+      if (!token) {
+        throw new Error('Пустой токен от сервера');
+      }
+
+      const payload = parseJwt(token);
+      console.log('JWT payload:', payload);
+
+      const userData = {
+        id: payload?.userId || payload?.nameid || payload?.sub,
+        email: form.email.trim(),
+        nickname: payload?.nickname || form.email.trim(),
+      };
+      
+      console.log('UserData:', userData);
+
+      login(userData, token);
+      console.log('Авторизация успешна, переход к проектам...');
+      
       navigate("/projects");
-    } else {
-      setError("Неверный логин или пароль");
+      
+    } catch (err) {
+      console.error(' Ошибка авторизации:', err);
+      console.error('Stack:', err.stack);
+      setError(err.message || "Ошибка авторизации");
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
-  };
-
-  const fillDemoCredentials = (email) => {
-    setForm({ email, password: "123" });
   };
 
   return (
@@ -61,8 +122,8 @@ export default function LoginPage() {
             />
           </div>
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={isLoading}
             className="login-btn"
           >
@@ -71,6 +132,27 @@ export default function LoginPage() {
 
           {error && <div className="error-message">{error}</div>}
         </form>
+
+        
+        <div style={{ marginTop: '20px', textAlign: 'center' }}>
+          <button 
+            onClick={bypassAuth}
+            style={{
+              padding: '12px 24px',
+              background: '#ffc107',
+              color: 'black',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              fontSize: '14px'
+            }}
+          >
+            тппло
+          </button>
+          <p style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
+          </p>
+        </div>
       </div>
     </div>
   );

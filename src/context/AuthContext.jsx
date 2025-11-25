@@ -1,4 +1,5 @@
-import { createContext, useState, useEffect } from "react";
+import { createContext, useState, useEffect, useCallback } from "react";
+import { AUTH_EVENTS } from "../services/apiService.js";
 
 export const AuthContext = createContext();
 
@@ -8,29 +9,51 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
-    const storedToken = localStorage.getItem("jwt_token");
-    if (storedUser && storedToken) {
+    if (storedUser) {
       setUser(JSON.parse(storedUser));
     }
   }, []);
 
-  const login = (userData, jwtToken) => {
-    const userWithId = { ...userData, id: Date.now() };
-    setUser(userWithId);
-    localStorage.setItem("user", JSON.stringify(userWithId));
-    localStorage.setItem("jwt_token", jwtToken); 
-  };
+  const login = useCallback((userData, token) => {
+    if (!userData) return;
 
-  const logout = () => {
+    setUser(userData);
+    localStorage.setItem("user", JSON.stringify(userData));
+
+    if (token) {
+      localStorage.setItem("jwt_token", token);
+    } else {
+      localStorage.removeItem("jwt_token");
+    }
+  }, []);
+
+  const logout = useCallback(() => {
     setUser(null);
     setCurrentProject(null);
     localStorage.removeItem("user");
     localStorage.removeItem("jwt_token");
+  }, []);
+
+  const setProject = (project, role) => {
+    setCurrentProject({
+      id: project.id,
+      name: project.name,
+      role: role,
+    });
   };
 
-  const setProject = (project, userRole) => {
-    setCurrentProject({ ...project, userRole });
-  };
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      logout();
+    };
+
+    window.addEventListener(AUTH_EVENTS.unauthorized, handleUnauthorized);
+    return () =>
+      window.removeEventListener(
+        AUTH_EVENTS.unauthorized,
+        handleUnauthorized
+      );
+  }, [logout]);
 
   return (
     <AuthContext.Provider value={{ 
