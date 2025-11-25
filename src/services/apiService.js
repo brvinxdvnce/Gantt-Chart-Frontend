@@ -10,15 +10,8 @@ export const AUTH_EVENTS = {
 };
 
 function buildBody(payload) {
-  if (payload === undefined || payload === null) {
-    return undefined;
-  }
-
-  if (typeof payload === "string") {
-    return payload;
-  }
-
-  return JSON.stringify(payload);
+  if (payload === undefined || payload === null) return undefined;
+  return typeof payload === "string" ? payload : JSON.stringify(payload);
 }
 
 async function parseResponse(response) {
@@ -80,10 +73,7 @@ export const userService = {
     return request("/users/register", { method: "POST", body: dto });
   },
   login(credentials) {
-    return request("/users/login", {
-      method: "POST",
-      body: credentials
-    });
+    return request("/users/login", { method: "POST", body: credentials });
   },
   getById(userId) {
     return request(`/users/${userId}`);
@@ -175,13 +165,25 @@ export const taskService = {
       },
     });
   },
-  addPerformer(taskId, userId) {
-    return request(`/tasks/${taskId}/performers?userId=${userId}`, {
+  addUserPerformer(taskId, userId) {
+    return request(`/tasks/${taskId}/performers/users?id=${userId}`, {
       method: "POST",
     });
   },
-  removePerformer(taskId, userId) {
-    return request(`/tasks/${taskId}/performers?userId=${userId}`, {
+  removeUserPerformer(taskId, userId) {
+    return request(`/tasks/${taskId}/performers/users?id=${userId}`, {
+      method: "DELETE",
+    });
+  },
+
+
+  addTeamPerformer(taskId, teamId) {
+    return request(`/tasks/${taskId}/performers/teams?id=${teamId}`, {
+      method: "POST",
+    });
+  },
+  removeTeamPerformer(taskId, teamId) {
+    return request(`/tasks/${taskId}/performers/teams?id=${teamId}`, {
       method: "DELETE",
     });
   },

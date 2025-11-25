@@ -11,7 +11,8 @@ const normalizeRole = (value) => {
   return "member";
 };
 
-const memberId = (member) => member?.userId ?? member?.id;
+const memberId = (member) => member?.user?.id ?? member?.id;
+
 
 export default function GanttPage() {
   const { id } = useParams();
@@ -35,7 +36,7 @@ export default function GanttPage() {
       const data = response?.result ?? response;
       setProjectInfo(data);
       setMembers(data?.members ?? []);
-      const role = normalizeRole(data?.currentUserRole ?? data?.role);
+      const role = data?.creator?.id === localStorage.getItem("userId") ? "admin" : "member";
       if (data?.id) {
         setProject({ id: data.id, name: data.name }, role);
       }
