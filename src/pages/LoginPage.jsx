@@ -22,20 +22,19 @@ export default function LoginPage() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
   const navigate = useNavigate();
 
   const fillDemoCredentials = (email) => {
     setForm({ email, password: "123" });
   };
+
   const bypassAuth = () => {
-    console.log("тест на Api");
-    
     const mockUserData = {
       id: "mock-user-id-123",
       email: "test@test.com",
       nickname: "Test User"
     };
-    
     login(mockUserData, "mock-jwt-token");
     navigate("/projects");
   };
@@ -45,47 +44,51 @@ export default function LoginPage() {
     setError("");
     setIsLoading(true);
 
-    console.log('Начало авторизации...');
-    console.log(' Email:', form.email);
-    console.log('Password length:', form.password.length);
-
     try {
-      console.log(' Отправка запроса на сервер...');
-      
+      if (isRegistering) {
+        console.log("Начало регистрации...");
+        const registrationData = {
+          email: form.email.trim(),
+          password: form.password,
+        };
+        console.log("Данные для регистрации:", registrationData);
+
+        const response = await userService.register(registrationData);
+        if (!response) throw new Error("Ошибка регистрации");
+
+        alert("Регистрация успешна! Теперь войдите в систему.");
+        setIsRegistering(false);
+        setForm({ email: "", password: "" });
+        setIsLoading(false);
+        return;
+      }
+
+      console.log("Начало авторизации...");
       const credentials = {
         email: form.email.trim(),
         password: form.password,
       };
-      console.log('Данные для отправки:', credentials);
+      console.log("Данные для входа:", credentials);
 
       const token = await userService.login(credentials);
-      console.log('Токен получен:', token ? 'ДА' : 'НЕТ');
-      console.log('Токен содержимое:', token);
+      console.log("Токен получен:", token ? "ДА" : "НЕТ");
 
       if (!token) {
-        throw new Error('Пустой токен от сервера');
+        throw new Error("Пустой токен от сервера");
       }
 
       const payload = parseJwt(token);
-      console.log('JWT payload:', payload);
-
       const userData = {
         id: payload?.userId || payload?.nameid || payload?.sub,
         email: form.email.trim(),
-        nickname: payload?.nickname || form.email.trim(),
+        nickname: form.email.trim(), 
       };
-      
-      console.log('UserData:', userData);
 
       login(userData, token);
-      console.log('Авторизация успешна, переход к проектам...');
-      
       navigate("/projects");
-      
     } catch (err) {
-      console.error(' Ошибка авторизации:', err);
-      console.error('Stack:', err.stack);
-      setError(err.message || "Ошибка авторизации");
+      console.error(err);
+      setError(err.message || (isRegistering ? "Ошибка регистрации" : "Ошибка авторизации"));
     } finally {
       setIsLoading(false);
     }
@@ -96,7 +99,7 @@ export default function LoginPage() {
       <div className="login-card">
         <div className="login-header">
           <h1>Диаграмма Ганта</h1>
-          <p>Войдите в свою учетную запись</p>
+          <p>{isRegistering ? "Создайте новую учетную запись" : "Войдите в свою учетную запись"}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
@@ -110,7 +113,7 @@ export default function LoginPage() {
               className="form-input"
             />
           </div>
-          
+
           <div className="form-group">
             <input
               type="password"
@@ -122,36 +125,48 @@ export default function LoginPage() {
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="login-btn"
-          >
-            {isLoading ? "Вход..." : "Войти"}
+          <button type="submit" disabled={isLoading} className="login-btn">
+            {isLoading ? (isRegistering ? "Регистрация..." : "Вход...") : (isRegistering ? "Зарегистрироваться" : "Войти")}
           </button>
 
           {error && <div className="error-message">{error}</div>}
         </form>
 
-        
-        <div style={{ marginTop: '20px', textAlign: 'center' }}>
-          <button 
-            onClick={bypassAuth}
+        <div style={{ marginTop: "20px", textAlign: "center" }}>
+          {!isRegistering && (
+            <button
+              onClick={bypassAuth}
+              style={{
+                padding: "12px 24px",
+                background: "#ffc107",
+                color: "black",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontWeight: "bold",
+                fontSize: "14px",
+                marginBottom: "8px"
+              }}
+            >
+              тппло
+            </button>
+          )}
+
+          <button
+            onClick={() => setIsRegistering(!isRegistering)}
             style={{
-              padding: '12px 24px',
-              background: '#ffc107',
-              color: 'black',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              fontSize: '14px'
+              padding: "12px 24px",
+              background: "#28a745",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontWeight: "bold",
+              fontSize: "14px"
             }}
           >
-            тппло
+            {isRegistering ? "Уже есть аккаунт? Войти" : "Регистрация"}
           </button>
-          <p style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
-          </p>
         </div>
       </div>
     </div>
