@@ -19,7 +19,8 @@ function parseJwt(token) {
 
 export default function LoginPage() {
   const { login } = useContext(AuthContext);
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [formAuth, setFormAuth] = useState({ email: "", password: "" });
+   const [formReg, setFormReg] = useState({ email: "", password: "", username: "" });
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
@@ -48,8 +49,9 @@ export default function LoginPage() {
       if (isRegistering) {
         console.log("Начало регистрации...");
         const registrationData = {
-          email: form.email.trim(),
-          password: form.password,
+          email: formReg.email.trim(),
+          password: formReg.password,
+          username: formReg.username
         };
         console.log("Данные для регистрации:", registrationData);
 
@@ -58,15 +60,15 @@ export default function LoginPage() {
 
         alert("Регистрация успешна! Теперь войдите в систему.");
         setIsRegistering(false);
-        setForm({ email: "", password: "" });
+        setFormReg({ email: "", password: "", username: "" });
         setIsLoading(false);
         return;
       }
 
       console.log("Начало авторизации...");
       const credentials = {
-        email: form.email.trim(),
-        password: form.password,
+        email: formAuth.email.trim(),
+        password: formAuth.password,
       };
       console.log("Данные для входа:", credentials);
 
@@ -80,8 +82,8 @@ export default function LoginPage() {
       const payload = parseJwt(token);
       const userData = {
         id: payload?.userId || payload?.nameid || payload?.sub,
-        email: form.email.trim(),
-        nickname: form.email.trim(), 
+        email: formAuth.email.trim(),
+        nickname: formAuth.email.trim(), 
       };
 
       login(userData, token);
@@ -103,27 +105,63 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
-          <div className="form-group">
-            <input
-              type="email"
-              placeholder="Введите email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              required
-              className="form-input"
-            />
-          </div>
-
-          <div className="form-group">
-            <input
-              type="password"
-              placeholder="Пароль"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required
-              className="form-input"
-            />
-          </div>
+          {isRegistering ? (
+            <>
+              <div className="form-group">
+                <input
+                  type="text"
+                  placeholder="Введите никнейм"
+                  value={formReg.username}
+                  onChange={(e) => setFormReg({ ...formReg, username: e.target.value })}
+                  required
+                  className="form-input"
+                />
+              </div>
+              <div className="form-group">
+                <input
+                  type="email"
+                  placeholder="Введите email"
+                  value={formReg.email}
+                  onChange={(e) => setFormReg({ ...formReg, email: e.target.value })}
+                  required
+                  className="form-input"
+                />
+              </div>
+              <div className="form-group">
+                <input
+                  type="password"
+                  placeholder="Пароль"
+                  value={formReg.password}
+                  onChange={(e) => setFormReg({ ...formReg, password: e.target.value })}
+                  required
+                  className="form-input"
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="form-group">
+                <input
+                  type="email"
+                  placeholder="Введите email"
+                  value={formAuth.email}
+                  onChange={(e) => setFormAuth({ ...formAuth, email: e.target.value })}
+                  required
+                  className="form-input"
+                />
+              </div>
+              <div className="form-group">
+                <input
+                  type="password"
+                  placeholder="Пароль"
+                  value={formAuth.password}
+                  onChange={(e) => setFormAuth({ ...formAuth, password: e.target.value })}
+                  required
+                  className="form-input"
+                />
+              </div>
+            </>
+          )}
 
           <button type="submit" disabled={isLoading} className="login-btn">
             {isLoading ? (isRegistering ? "Регистрация..." : "Вход...") : (isRegistering ? "Зарегистрироваться" : "Войти")}
@@ -172,3 +210,41 @@ export default function LoginPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
