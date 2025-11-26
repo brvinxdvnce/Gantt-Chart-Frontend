@@ -30,6 +30,7 @@ export default function ProjectsPage() {
     try {
       const data = await projectService.list(user.id);
       setProjects(Array.isArray(data) ? data : []);
+      console.log(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err.message || "Не удалось загрузить проекты");
     } finally {
@@ -50,10 +51,7 @@ export default function ProjectsPage() {
       const dto = {
         name: form.name.trim(),
         creatorId: user.id,
-        deadLine: form.deadLine ? new Date(form.deadLine).toISOString() : null,
-        rootTask: null,
-        tasks: null,
-        members: null,
+        deadLine: form.deadLine ? new Date(form.deadLine).toISOString() : null
       };
       await projectService.create(dto);
       await loadProjects();
