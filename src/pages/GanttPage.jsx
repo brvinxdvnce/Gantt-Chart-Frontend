@@ -20,6 +20,7 @@ export default function GanttPage() {
   const { currentProject, setProject } = useContext(AuthContext);
   const ganttContainer = useRef(null);
   const ganttReady = useRef(false);
+   const ganttEventIds = useRef([]);
 
   const [showAddMember, setShowAddMember] = useState(false);
   const [newMemberId, setNewMemberId] = useState("");
@@ -86,6 +87,14 @@ export default function GanttPage() {
 
   const setupGanttEvents = useCallback(
   (gantt, reload) => {
+
+      if (ganttEventIds.current.length) {
+      ganttEventIds.current.forEach((evId) => {
+        gantt.detachEvent(evId);
+      });
+      ganttEventIds.current = [];
+    }
+
     const toTaskDto = (task) => {
       const startDate =
         task.start_date || ganttConverter.formatDate(new Date());
@@ -104,6 +113,25 @@ export default function GanttPage() {
       return dto;
     };
 
+    const mapLinkTypeToBackend = (ganttType) => {
+      const t = Number(ganttType);
+      switch (t) {
+        case 0: 
+          return 2; 
+        case 1:
+          return 0;
+        case 2: 
+          return 3; 
+        case 3: 
+          return 1; 
+        default:
+          return 2; 
+      }
+    };
+
+    const evIds = [];
+
+      evIds.push(
        gantt.attachEvent("onAfterTaskAdd", async (taskId, task) => {
         try {
           await taskService.createTask(toTaskDto(task));
@@ -111,8 +139,10 @@ export default function GanttPage() {
         } catch (error) {
           console.error("Ошибка создания задачи:", error);
         }
-    });
+    }));
 
+
+      evIds.push(
       gantt.attachEvent("onAfterTaskUpdate", async (taskId, task) => {
         try {
           await taskService.updateTask(taskId, toTaskDto(task));
@@ -120,8 +150,9 @@ export default function GanttPage() {
         } catch (error) {
           console.error("Ошибка обновления задачи:", error);
         }
-      });
+      }));
 
+      evIds.push(
       gantt.attachEvent("onAfterTaskDelete", async (taskId) => {
         try {
           await taskService.deleteTask(taskId);
@@ -129,33 +160,38 @@ export default function GanttPage() {
         } catch (error) {
           console.error("Ошибка удаления задачи:", error);
         }
-      });
+      }));
 
+      evIds.push(
       gantt.attachEvent("onLinkCreated", async (link) => {
-        try {
-          const dependenceDto = {
-            parentId: link.source,
-            childId: link.target,
-            type: Number(link.type ?? 0),
-          };
-          await taskService.addDependency(link.target, dependenceDto);
-        } catch (error) {
-          console.error("Ошибка создания зависимости:", error);
-        }
-      });
+         try {
+        const dependenceDto = {
+          parentId: link.target,                    
+          childId: link.source,                   
+          type: mapLinkTypeToBackend(link.type),   
+        };
 
+        await taskService.addDependency(link.target, dependenceDto);
+      } catch (error) {
+        console.error("Ошибка создания зависимости:", error);
+      }
+      }));
+
+      evIds.push(
       gantt.attachEvent("onLinkDeleted", async (idValue, link) => {
         try {
-          const dependenceDto = {
-            parentId: link.source,
-            childId: link.target,
-            type: Number(link.type ?? 0),
-          };
-          await taskService.removeDependency(link.target, dependenceDto);
-        } catch (error) {
-          console.error("Ошибка удаления зависимости:", error);
-        }
-      });
+        const dependenceDto = {
+          parentId: link.target,
+          childId: link.source,
+          type: mapLinkTypeToBackend(link.type),
+        };
+
+        await taskService.removeDependency(link.target, dependenceDto);
+      } catch (error) {
+        console.error("Ошибка удаления зависимости:", error);
+      }
+      }));
+      ganttEventIds.current = evIds;
     },
     [id]
   );
@@ -177,6 +213,13 @@ export default function GanttPage() {
     return () => {
       ganttReady.current = false;
       if (window.gantt) {
+
+        if (ganttEventIds.current.length) {
+        ganttEventIds.current.forEach((evId) => {
+          window.gantt.detachEvent(evId);
+        });
+        ganttEventIds.current = [];
+      }
         window.gantt.clearAll?.();
         window.gantt.destroy?.();
       }
