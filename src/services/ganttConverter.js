@@ -1,3 +1,14 @@
+const mapBackendTypeToGantt = (backendType) => {
+  const t = Number(backendType);
+  switch (t) {
+    case 2: return 0; 
+    case 0: return 1; 
+    case 3: return 2; 
+    case 1: return 3; 
+    default: return 0;
+  }
+};
+
 const MS_IN_DAY = 24 * 60 * 60 * 1000;
 
 function ensureDate(value) {
@@ -80,12 +91,17 @@ export const ganttConverter = {
           type: task.type ?? task.Type ?? "task",
         };
       }),
-      links: links.map((link) => ({
-        id: link.id ?? link.Id ?? `${link.sourceTaskId}-${link.targetTaskId}`,
-        type: `${link.type ?? link.Type ?? 0}`,
-        source: link.sourceTaskId ?? link.SourceTaskId ?? link.source,
-        target: link.targetTaskId ?? link.TargetTaskId ?? link.target,
-      })),
+      links: links.map((link) => {
+  const backendType = link.type ?? link.Type ?? 0;
+
+  return {
+    id: link.id ?? link.Id ?? `${link.sourceTaskId}-${link.targetTaskId}`,
+    // тут Gantt'у отдаём уже его тип, а не backend-тип
+    type: String(mapBackendTypeToGantt(backendType)),
+    source: link.sourceTaskId ?? link.SourceTaskId ?? link.source,
+    target: link.targetTaskId ?? link.TargetTaskId ?? link.target,
+  };
+}),
     };
   },
 
@@ -96,7 +112,6 @@ export const ganttConverter = {
         name: task.text,
         description: task.description ?? "",
         isCompleted: Boolean(task.progress && task.progress >= 1),
-        dependencies: [],
         startTime: this.parseDate(task.start_date),
         endTime: this.addDuration(task.start_date, task.duration),
       })),

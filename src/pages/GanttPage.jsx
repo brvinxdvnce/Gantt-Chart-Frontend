@@ -104,7 +104,6 @@ export default function GanttPage() {
         name: task.text,
         description: task.description ?? "",
         isCompleted: Boolean(task.progress && task.progress >= 1),
-        dependencies: [],
         startTime: ganttConverter.parseDate(startDate),
         endTime: ganttConverter.addDuration(startDate, task.duration),
       };
@@ -114,20 +113,16 @@ export default function GanttPage() {
     };
 
     const mapLinkTypeToBackend = (ganttType) => {
-      const t = Number(ganttType);
-      switch (t) {
-        case 0: 
-          return 2; 
-        case 1:
-          return 0;
-        case 2: 
-          return 3; 
-        case 3: 
-          return 1; 
-        default:
-          return 2; 
-      }
-    };
+  const t = Number(ganttType);
+  switch (t) {
+    case 0: return 2;
+    case 1: return 0;
+    case 2: return 3;
+    case 3: return 1;
+    default: return 2;
+  }
+};
+
 
     const evIds = [];
 
@@ -163,37 +158,50 @@ export default function GanttPage() {
       }));
 
       evIds.push(
-      gantt.attachEvent("onLinkCreated", async (link) => {
-         try {
-        const dependenceDto = {
-          parentId: link.target,                    
-          childId: link.source,                   
-          type: mapLinkTypeToBackend(link.type),   
-        };
-
-        await taskService.addDependency(link.target, dependenceDto);
-      } catch (error) {
-        console.error("Ошибка создания зависимости:", error);
-      }
-      }));
-
-      evIds.push(
-      gantt.attachEvent("onLinkDeleted", async (idValue, link) => {
+      gantt.attachEvent("onAfterLinkAdd", async (linkId, link) => {
         try {
-        const dependenceDto = {
-          parentId: link.target,
-          childId: link.source,
-          type: mapLinkTypeToBackend(link.type),
-        };
+          console.log("onAfterLinkAdd", linkId, link);
 
-        await taskService.removeDependency(link.target, dependenceDto);
-      } catch (error) {
-        console.error("Ошибка удаления зависимости:", error);
-      }
-      }));
-      ganttEventIds.current = evIds;
-    },
-    [id]
+          const dependenceDto = {
+            parentId: link.source, 
+            childId: link.target, 
+            type: mapLinkTypeToBackend(link.type),
+          };
+
+          console.log("DTO зависимости (ADD):", dependenceDto);
+
+          
+          await taskService.addDependency(link.source, dependenceDto);
+        } catch (error) {
+          console.error("Ошибка создания зависимости:", error);
+        }
+      })
+    );
+
+   
+    evIds.push(
+      gantt.attachEvent("onAfterLinkDelete", async (linkId, link) => {
+        try {
+          console.log("onAfterLinkDelete", linkId, link);
+
+          const dependenceDto = {
+            parentId: link.source, 
+            childId: link.target, 
+            type: mapLinkTypeToBackend(link.type),
+          };
+
+          console.log("DTO зависимости (REMOVE):", dependenceDto);
+
+          await taskService.removeDependency(link.source, dependenceDto);
+        } catch (error) {
+          console.error("Ошибка удаления зависимости:", error);
+        }
+      })
+    );
+
+    ganttEventIds.current = evIds;
+  },
+  [id]
   );
 
   useEffect(() => {
