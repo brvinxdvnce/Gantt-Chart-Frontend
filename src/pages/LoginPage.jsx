@@ -19,22 +19,22 @@ function parseJwt(token) {
 
 export default function LoginPage() {
   const { login } = useContext(AuthContext);
-  const [formAuth, setFormAuth] = useState({ email: "", password: "" });
-   const [formReg, setFormReg] = useState({ email: "", password: "", username: "" });
+  const [formAun, setFormAun] = useState({ email: "", password: "" });
+  const [formReg, setFormReg] = useState({ email: "", password: "", username: "" });
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const navigate = useNavigate();
 
   const fillDemoCredentials = (email) => {
-    setForm({ email, password: "123" });
+    setFormAun({ email, password: "123" });
   };
 
   const bypassAuth = () => {
     const mockUserData = {
       id: "mock-user-id-123",
       email: "test@test.com",
-      nickname: "Test User"
+      nickname: "Test User",
     };
     login(mockUserData, "mock-jwt-token");
     navigate("/projects");
@@ -49,9 +49,9 @@ export default function LoginPage() {
       if (isRegistering) {
         console.log("Начало регистрации...");
         const registrationData = {
+          nickName: formReg.username,         
           email: formReg.email.trim(),
           password: formReg.password,
-          username: formReg.username
         };
         console.log("Данные для регистрации:", registrationData);
 
@@ -67,8 +67,8 @@ export default function LoginPage() {
 
       console.log("Начало авторизации...");
       const credentials = {
-        email: formAuth.email.trim(),
-        password: formAuth.password,
+        email: formAun.email.trim(),
+        password: formAun.password,
       };
       console.log("Данные для входа:", credentials);
 
@@ -82,15 +82,18 @@ export default function LoginPage() {
       const payload = parseJwt(token);
       const userData = {
         id: payload?.userId || payload?.nameid || payload?.sub,
-        email: formAuth.email.trim(),
-        nickname: formAuth.email.trim(), 
+        email: formAun.email.trim(),
+        nickname: formAun.email.trim(),
       };
 
       login(userData, token);
       navigate("/projects");
     } catch (err) {
       console.error(err);
-      setError(err.message || (isRegistering ? "Ошибка регистрации" : "Ошибка авторизации"));
+      setError(
+        err.message ||
+          (isRegistering ? "Ошибка регистрации" : "Ошибка авторизации")
+      );
     } finally {
       setIsLoading(false);
     }
@@ -105,66 +108,65 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
-          {isRegistering ? (
-            <>
-              <div className="form-group">
-                <input
-                  type="text"
-                  placeholder="Введите никнейм"
-                  value={formReg.username}
-                  onChange={(e) => setFormReg({ ...formReg, username: e.target.value })}
-                  required
-                  className="form-input"
-                />
-              </div>
-              <div className="form-group">
-                <input
-                  type="email"
-                  placeholder="Введите email"
-                  value={formReg.email}
-                  onChange={(e) => setFormReg({ ...formReg, email: e.target.value })}
-                  required
-                  className="form-input"
-                />
-              </div>
-              <div className="form-group">
-                <input
-                  type="password"
-                  placeholder="Пароль"
-                  value={formReg.password}
-                  onChange={(e) => setFormReg({ ...formReg, password: e.target.value })}
-                  required
-                  className="form-input"
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="form-group">
-                <input
-                  type="email"
-                  placeholder="Введите email"
-                  value={formAuth.email}
-                  onChange={(e) => setFormAuth({ ...formAuth, email: e.target.value })}
-                  required
-                  className="form-input"
-                />
-              </div>
-              <div className="form-group">
-                <input
-                  type="password"
-                  placeholder="Пароль"
-                  value={formAuth.password}
-                  onChange={(e) => setFormAuth({ ...formAuth, password: e.target.value })}
-                  required
-                  className="form-input"
-                />
-              </div>
-            </>
+          {isRegistering && (
+            <div className="form-group">
+              <input
+                type="text"
+                placeholder="Имя пользователя"
+                value={formReg.username}
+                onChange={(e) =>
+                  setFormReg((prev) => ({ ...prev, username: e.target.value }))
+                }
+                required
+                className="form-input"
+              />
+            </div>
           )}
 
+          <div className="form-group">
+            <input
+              type="email"
+              placeholder="Введите email"
+              value={isRegistering ? formReg.email : formAun.email}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (isRegistering) {
+                  setFormReg((prev) => ({ ...prev, email: value }));
+                } else {
+                  setFormAun((prev) => ({ ...prev, email: value }));
+                }
+              }}
+              required
+              className="form-input"
+            />
+          </div>
+
+          <div className="form-group">
+            <input
+              type="password"
+              placeholder="Пароль"
+              value={isRegistering ? formReg.password : formAun.password}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (isRegistering) {
+                  setFormReg((prev) => ({ ...prev, password: value }));
+                } else {
+                  setFormAun((prev) => ({ ...prev, password: value }));
+                }
+              }}
+              required
+              className="form-input"
+            />
+          </div>
+
           <button type="submit" disabled={isLoading} className="login-btn">
-            {isLoading ? (isRegistering ? "Регистрация..." : "Вход...") : (isRegistering ? "Зарегистрироваться" : "Войти")}
+            {isLoading
+              ? isRegistering
+                ? "Регистрация..."
+                : "Вход..."
+              : isRegistering
+              ? "Зарегистрироваться"
+              : "Войти"}
           </button>
 
           {error && <div className="error-message">{error}</div>}
@@ -183,7 +185,7 @@ export default function LoginPage() {
                 cursor: "pointer",
                 fontWeight: "bold",
                 fontSize: "14px",
-                marginBottom: "8px"
+                marginBottom: "8px",
               }}
             >
               тппло
@@ -200,7 +202,7 @@ export default function LoginPage() {
               borderRadius: "6px",
               cursor: "pointer",
               fontWeight: "bold",
-              fontSize: "14px"
+              fontSize: "14px",
             }}
           >
             {isRegistering ? "Уже есть аккаунт? Войти" : "Регистрация"}
@@ -210,41 +212,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

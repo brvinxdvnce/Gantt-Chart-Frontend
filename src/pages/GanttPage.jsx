@@ -29,58 +29,91 @@ export default function GanttPage() {
   const [projectInfo, setProjectInfo] = useState(null);
 
   const loadProject = useCallback(async () => {
-    if (!id) return;
-    try {
-      setLoading(true);
-      const response = await projectService.get(id);
-      const data = response?.result ?? response;
-      setProjectInfo(data);
-      setMembers(data?.members ?? []);
-      const role = data?.creator?.id === localStorage.getItem("userId") ? "admin" : "member";
-      if (data?.id) {
-        setProject({ id: data.id, name: data.name }, role);
+  if (!id) return;
+  try {
+    setLoading(true);
+    const response = await projectService.get(id);
+    const data = response?.result ?? response;
+
+    setProjectInfo(data);
+    setMembers(data?.members ?? []);
+
+    const userId = localStorage.getItem("userId");
+
+
+    let role = currentProject?.role;
+
+    if (!role && data?.members && userId) {
+      const me = data.members.find((m) => memberId(m) === userId);
+      if (me) {
+        role = normalizeRole(me.role);
       }
-      if (ganttReady.current && window.gantt) {
-        window.gantt.clearAll?.();
-        window.gantt.parse(
-          ganttConverter.toGanttFormat({
-            rootTask: data?.rootTask,
-            tasks: data?.tasks,
-          })
-        );
-      }
-    } catch (error) {
-      console.error("Ошибка загрузки проекта:", error);
-    } finally {
-      setLoading(false);
     }
-  }, [id, setProject]);
+
+  
+    if (!role && data?.creator?.id === userId) {
+      role = "admin";
+    }
+
+    if (!role) {
+      role = "member";
+    }
+
+    if (data?.id) {
+      setProject({ id: data.id, name: data.name }, role);
+    }
+
+    if (ganttReady.current && window.gantt) {
+      const gantt = window.gantt;
+      gantt.clearAll?.();
+      gantt.parse(
+        ganttConverter.toGanttFormat({
+          rootTask: data?.rootTask,
+          tasks: data?.tasks,
+    })
+  );
+}
+
+  } catch (error) {
+    console.error("Ошибка загрузки проекта:", error);
+  } finally {
+    setLoading(false);
+  }
+}, [id]);
+
+
+
 
   const setupGanttEvents = useCallback(
-    (gantt, projectId, reload) => {
-      const toTaskDto = (task) => {
-        const startDate = task.start_date || ganttConverter.formatDate(new Date());
-        return {
-          projectId,
-          name: task.text,
-          description: task.description ?? "",
-          isCompleted: Boolean(task.progress && task.progress >= 1),
-          dependencies: [],
-          startTime: ganttConverter.parseDate(startDate),
-          endTime: ganttConverter.addDuration(startDate, task.duration),
-        };
+  (gantt, reload) => {
+    const toTaskDto = (task) => {
+      const startDate =
+        task.start_date || ganttConverter.formatDate(new Date());
+
+      const dto = {
+        projectId: id, 
+        name: task.text,
+        description: task.description ?? "",
+        isCompleted: Boolean(task.progress && task.progress >= 1),
+        dependencies: [],
+        startTime: ganttConverter.parseDate(startDate),
+        endTime: ganttConverter.addDuration(startDate, task.duration),
       };
 
-      gantt.attachEvent("onTaskCreated", async (task) => {
+      console.log("DTO для задачи:", dto); 
+      return dto;
+    };
+
+       gantt.attachEvent("onAfterTaskAdd", async (taskId, task) => {
         try {
           await taskService.createTask(toTaskDto(task));
           await reload();
         } catch (error) {
           console.error("Ошибка создания задачи:", error);
         }
-      });
+    });
 
-      gantt.attachEvent("onTaskChanged", async (taskId, task) => {
+      gantt.attachEvent("onAfterTaskUpdate", async (taskId, task) => {
         try {
           await taskService.updateTask(taskId, toTaskDto(task));
           await reload();
@@ -89,7 +122,7 @@ export default function GanttPage() {
         }
       });
 
-      gantt.attachEvent("onTaskDeleted", async (taskId) => {
+      gantt.attachEvent("onAfterTaskDelete", async (taskId) => {
         try {
           await taskService.deleteTask(taskId);
           await reload();
@@ -124,7 +157,7 @@ export default function GanttPage() {
         }
       });
     },
-    []
+    [id]
   );
 
   useEffect(() => {
@@ -137,7 +170,7 @@ export default function GanttPage() {
       gantt.config.date_format = "%Y-%m-%d";
       gantt.init(ganttContainer.current);
       ganttReady.current = true;
-      setupGanttEvents(gantt, id, loadProject);
+      setupGanttEvents(gantt, loadProject);
       loadProject();
     }
 
