@@ -145,6 +145,14 @@ export const taskService = {
   deleteTask(taskId) {
     return request(`/tasks/${taskId}`, { method: "DELETE" });
   },
+   setTaskStatus(taskId, status) {
+  console.log("API setTaskStatus call", { taskId, status });
+
+  return request(`/tasks/${taskId}/status`, {
+    method: "PATCH",
+    body: status,
+  });
+},
   addDependency(taskId, dto) {
     return request(`/tasks/${taskId}/dependence`, {
       method: "POST",

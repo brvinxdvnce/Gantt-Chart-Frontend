@@ -67,21 +67,32 @@ export const ganttConverter = {
           task.StartDate ??
           task.StartTime ??
           task.start_date;
+
         const end =
           task.endDate ??
           task.endTime ??
           task.EndDate ??
           task.EndTime ??
           task.end_date;
+
+        // ✅ сначала вычисляем isCompleted
+        const isCompleted =
+          task.isCompleted ??
+          task.IsCompleted ??
+          false;
+
+        // ✅ потом – progress (чтобы не было обращения к несуществующей переменной)
+        const progress =
+          typeof task.progress === "number"
+            ? task.progress
+            : (isCompleted ? 1 : 0);
+
         return {
           id: task.id ?? task.Id,
           text: task.text ?? task.name ?? task.Name ?? "Новая задача",
           start_date: this.formatDate(start),
           duration: calcDuration(start, end),
-          progress:
-            task.progress ??
-            (task.isCompleted ?? task.IsCompleted ? 1 : 0) ??
-            0,
+          progress,
           parent:
             task.parentId ??
             task.ParentId ??
@@ -89,19 +100,22 @@ export const ganttConverter = {
             task.ParentTaskId ??
             task.parent,
           type: task.type ?? task.Type ?? "task",
+
+          // это нужно для чекбокса в колонке "Готово"
+          isCompleted: Boolean(isCompleted),
         };
       }),
-      links: links.map((link) => {
-  const backendType = link.type ?? link.Type ?? 0;
 
-  return {
-    id: link.id ?? link.Id ?? `${link.sourceTaskId}-${link.targetTaskId}`,
-    // тут Gantt'у отдаём уже его тип, а не backend-тип
-    type: String(mapBackendTypeToGantt(backendType)),
-    source: link.sourceTaskId ?? link.SourceTaskId ?? link.source,
-    target: link.targetTaskId ?? link.TargetTaskId ?? link.target,
-  };
-}),
+      links: links.map((link) => {
+        const backendType = link.type ?? link.Type ?? 0;
+
+        return {
+          id: link.id ?? link.Id ?? `${link.sourceTaskId}-${link.targetTaskId}`,
+          type: String(mapBackendTypeToGantt(backendType)),
+          source: link.sourceTaskId ?? link.SourceTaskId ?? link.source,
+          target: link.targetTaskId ?? link.TargetTaskId ?? link.target,
+        };
+      }),
     };
   },
 
@@ -111,7 +125,7 @@ export const ganttConverter = {
         projectId: projectId ?? task.projectId ?? null,
         name: task.text,
         description: task.description ?? "",
-        isCompleted: Boolean(task.progress && task.progress >= 1),
+        isCompleted: Boolean(task.isCompleted ?? (task.progress && task.progress >= 1)),
         startTime: this.parseDate(task.start_date),
         endTime: this.addDuration(task.start_date, task.duration),
       })),
@@ -121,6 +135,23 @@ export const ganttConverter = {
         type: Number(link.type ?? 0),
       })),
     };
+  },
+
+  formatDate(dateInput) {
+    const date = ensureDate(dateInput) ?? new Date();
+    return date.toISOString().split("T")[0];
+  },
+
+  parseDate(ganttDate) {
+    const date = ensureDate(ganttDate) ?? new Date();
+    return date.toISOString();
+  },
+
+  addDuration(dateString, duration) {
+    const start = ensureDate(dateString) ?? new Date();
+    const days = Number(duration) || 1;
+    const end = new Date(start.getTime() + days * MS_IN_DAY);
+    return end.toISOString();
   },
 
   formatDate(dateInput) {

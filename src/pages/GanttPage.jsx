@@ -87,8 +87,7 @@ export default function GanttPage() {
 
   const setupGanttEvents = useCallback(
   (gantt, reload) => {
-
-      if (ganttEventIds.current.length) {
+    if (ganttEventIds.current.length) {
       ganttEventIds.current.forEach((evId) => {
         gantt.detachEvent(evId);
       });
@@ -100,77 +99,80 @@ export default function GanttPage() {
         task.start_date || ganttConverter.formatDate(new Date());
 
       const dto = {
-        projectId: id, 
+        projectId: id,
         name: task.text,
         description: task.description ?? "",
-        isCompleted: Boolean(task.progress && task.progress >= 1),
+        isCompleted: task.isCompleted ?? Boolean(task.progress && task.progress >= 1),
         startTime: ganttConverter.parseDate(startDate),
         endTime: ganttConverter.addDuration(startDate, task.duration),
       };
 
-      console.log("DTO для задачи:", dto); 
+      console.log("DTO для задачи:", dto);
       return dto;
     };
 
     const mapLinkTypeToBackend = (ganttType) => {
-  const t = Number(ganttType);
-  switch (t) {
-    case 0: return 2;
-    case 1: return 0;
-    case 2: return 3;
-    case 3: return 1;
-    default: return 2;
-  }
-};
-
+      const t = Number(ganttType);
+      switch (t) {
+        case 0: return 2;
+        case 1: return 0;
+        case 2: return 3;
+        case 3: return 1;
+        default: return 2;
+      }
+    };
 
     const evIds = [];
 
-      evIds.push(
-       gantt.attachEvent("onAfterTaskAdd", async (taskId, task) => {
+    evIds.push(
+      gantt.attachEvent("onAfterTaskAdd", async (taskId, task) => {
         try {
+          console.log("onAfterTaskAdd", taskId, task);
           await taskService.createTask(toTaskDto(task));
           await reload();
         } catch (error) {
           console.error("Ошибка создания задачи:", error);
         }
-    }));
+      })
+    );
 
-
-      evIds.push(
+    evIds.push(
       gantt.attachEvent("onAfterTaskUpdate", async (taskId, task) => {
         try {
+          console.log("onAfterTaskUpdate", taskId, task);
           await taskService.updateTask(taskId, toTaskDto(task));
           await reload();
         } catch (error) {
           console.error("Ошибка обновления задачи:", error);
         }
-      }));
+      })
+    );
 
-      evIds.push(
+    evIds.push(
       gantt.attachEvent("onAfterTaskDelete", async (taskId) => {
         try {
+          console.log("onAfterTaskDelete", taskId);
           await taskService.deleteTask(taskId);
           await reload();
         } catch (error) {
           console.error("Ошибка удаления задачи:", error);
         }
-      }));
+      })
+    );
 
-      evIds.push(
+    evIds.push(
       gantt.attachEvent("onAfterLinkAdd", async (linkId, link) => {
         try {
           console.log("onAfterLinkAdd", linkId, link);
 
           const dependenceDto = {
-            parentId: link.source, 
-            childId: link.target, 
+            parentId: link.source,
+            childId: link.target,
             type: mapLinkTypeToBackend(link.type),
           };
 
           console.log("DTO зависимости (ADD):", dependenceDto);
 
-          
           await taskService.addDependency(link.source, dependenceDto);
         } catch (error) {
           console.error("Ошибка создания зависимости:", error);
@@ -178,15 +180,14 @@ export default function GanttPage() {
       })
     );
 
-   
     evIds.push(
       gantt.attachEvent("onAfterLinkDelete", async (linkId, link) => {
         try {
           console.log("onAfterLinkDelete", linkId, link);
 
           const dependenceDto = {
-            parentId: link.source, 
-            childId: link.target, 
+            parentId: link.source,
+            childId: link.target,
             type: mapLinkTypeToBackend(link.type),
           };
 
@@ -199,10 +200,69 @@ export default function GanttPage() {
       })
     );
 
+   
+    evIds.push(
+  gantt.attachEvent("onTaskClick", function (taskId, e) {
+    const target = e.target || e.srcElement;
+    console.log("onTaskClick fired", { taskId, target });
+
+    if (!target) return true;
+
+   
+    let checkbox = null;
+
+    if (target.classList?.contains("task-complete-checkbox")) {
+      checkbox = target;
+    } else if (target.closest) {
+      checkbox = target.closest("input.task-complete-checkbox");
+    }
+
+  
+    if (!checkbox) {
+      return true;
+    }
+
+    e.preventDefault?.();
+    e.stopPropagation?.();
+
+    const task = gantt.getTask(taskId);
+    const newStatus = !task.isCompleted;
+
+    console.log("Перед запросом setTaskStatus", { taskId, newStatus, task });
+
+
+    checkbox.checked = newStatus;
+
+    (async () => {
+      try {
+        const res = await taskService.setTaskStatus(taskId, newStatus);
+        console.log("Ответ от setTaskStatus", res);
+
+        if (res?.success) {
+          task.isCompleted = newStatus;
+          task.progress = newStatus ? 1 : 0;
+          gantt.updateTask(taskId);
+        } else {
+          alert(res?.message || "Задачу нельзя завершить");
+          checkbox.checked = task.isCompleted;
+        }
+      } catch (error) {
+        console.error("Ошибка изменения статуса задачи:", error);
+        alert("Не удалось изменить статус задачи");
+        checkbox.checked = task.isCompleted;
+      }
+    })();
+
+
+    return false;
+  })
+);
+
     ganttEventIds.current = evIds;
   },
   [id]
-  );
+);
+
 
   useEffect(() => {
     loadProject();
@@ -212,6 +272,25 @@ export default function GanttPage() {
     if (ganttContainer.current && window.gantt) {
       const gantt = window.gantt;
       gantt.config.date_format = "%Y-%m-%d";
+
+       gantt.config.columns = [
+      { name: "text", label: "Задача", tree: true, width: "*" },
+      {
+        name: "completed",
+        label: "Готово",
+        align: "center",
+        width: 70,
+        template: function (task) {
+          const checked = task.isCompleted ? "checked" : "";
+          return `<input type="checkbox" class="task-complete-checkbox" ${checked} />`;
+        },
+      },
+      { name: "start_date", label: "Начало", align: "center", width: 90 },
+      { name: "duration", label: "Длительность", align: "center", width: 70 },
+      { name: "add", label: "", width: 44 },
+    ];
+
+
       gantt.init(ganttContainer.current);
       ganttReady.current = true;
       setupGanttEvents(gantt, loadProject);
