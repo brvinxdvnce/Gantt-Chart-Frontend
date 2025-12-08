@@ -21,6 +21,7 @@ export default function GanttPage() {
   const ganttContainer = useRef(null);
   const ganttReady = useRef(false);
    const ganttEventIds = useRef([]);
+   const isStatusUpdateRef = useRef(false);
 
   const [showAddMember, setShowAddMember] = useState(false);
   const [newMemberId, setNewMemberId] = useState("");
@@ -98,14 +99,15 @@ export default function GanttPage() {
       const startDate =
         task.start_date || ganttConverter.formatDate(new Date());
 
-      const dto = {
-        projectId: id,
-        name: task.text,
-        description: task.description ?? "",
-        isCompleted: task.isCompleted ?? Boolean(task.progress && task.progress >= 1),
-        startTime: ganttConverter.parseDate(startDate),
-        endTime: ganttConverter.addDuration(startDate, task.duration),
-      };
+       const dto = {
+    projectId: id,
+    name: task.text,
+    description: task.description ?? "",
+    isCompleted:
+      task.isCompleted ?? Boolean(task.progress && task.progress >= 1),
+    startTime: ganttConverter.toBackendStartIso(startDate),
+    endTime: ganttConverter.toBackendEndIso(startDate, task.duration),
+  };
 
       console.log("DTO для задачи:", dto);
       return dto;
@@ -139,6 +141,14 @@ export default function GanttPage() {
     evIds.push(
       gantt.attachEvent("onAfterTaskUpdate", async (taskId, task) => {
         try {
+           if (isStatusUpdateRef.current) {
+        console.log(
+          "onAfterTaskUpdate: пропускаем PATCH, это статус-апдейт",
+          { taskId }
+        );
+        isStatusUpdateRef.current = false;
+        return true;
+      }
           console.log("onAfterTaskUpdate", taskId, task);
           await taskService.updateTask(taskId, toTaskDto(task));
           await reload();
@@ -150,6 +160,7 @@ export default function GanttPage() {
 
     evIds.push(
       gantt.attachEvent("onAfterTaskDelete", async (taskId) => {
+        
         try {
           console.log("onAfterTaskDelete", taskId);
           await taskService.deleteTask(taskId);
@@ -241,6 +252,8 @@ export default function GanttPage() {
         if (res?.success) {
           task.isCompleted = newStatus;
           task.progress = newStatus ? 1 : 0;
+
+          isStatusUpdateRef.current = true;
           gantt.updateTask(taskId);
         } else {
           alert(res?.message || "Задачу нельзя завершить");

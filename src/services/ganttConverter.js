@@ -1,10 +1,10 @@
 const mapBackendTypeToGantt = (backendType) => {
   const t = Number(backendType);
   switch (t) {
-    case 2: return 0; 
-    case 0: return 1; 
-    case 3: return 2; 
-    case 1: return 3; 
+    case 2: return 0;
+    case 0: return 1;
+    case 3: return 2;
+    case 1: return 3;
     default: return 0;
   }
 };
@@ -21,9 +21,52 @@ function calcDuration(start, end) {
   const from = ensureDate(start);
   const to = ensureDate(end);
   if (!from || !to) return 1;
-  const diff = Math.max(1, Math.round((to - from) / MS_IN_DAY));
-  return diff;
+
+  // считаем разницу по дням без учёта часов, чтобы таймзона не портила
+  const fromMidnight = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const toMidnight = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+
+  const diffDays = Math.round((toMidnight - fromMidnight) / MS_IN_DAY);
+  return Math.max(1, diffDays || 1);
 }
+
+// ---------- ХЕЛПЕРЫ ДАТ ----------
+
+// Только дата для Gantt: "YYYY-MM-DD"
+function toGanttDateString(value) {
+  if (typeof value === "string" && value.length >= 10) {
+    return value.slice(0, 10);
+  }
+
+  const d = ensureDate(value) ?? new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+
+function toBackendStartIso(dateInput) {
+  
+  const dateString = toGanttDateString(dateInput); 
+
+  const [y, m, d] = dateString.split("-").map(Number);
+ 
+  const localNoon = new Date(y, m - 1, d, 12, 0, 0);
+  return localNoon.toISOString();
+}
+
+function toBackendEndIso(dateInput, duration) {
+  const dateString = toGanttDateString(dateInput); 
+  const [y, m, d] = dateString.split("-").map(Number);
+
+  const baseNoon = new Date(y, m - 1, d, 12, 0, 0);
+  const days = Number(duration) || 1;
+
+  const end = new Date(baseNoon.getTime() + days * MS_IN_DAY);
+  return end.toISOString();
+}
+
 
 function buildLinksFromDependencies(tasks = []) {
   const links = [];
@@ -75,13 +118,14 @@ export const ganttConverter = {
           task.EndTime ??
           task.end_date;
 
-        // ✅ сначала вычисляем isCompleted
+        const startStr = toGanttDateString(start);
+        const endStr = toGanttDateString(end);
+
         const isCompleted =
           task.isCompleted ??
           task.IsCompleted ??
           false;
 
-        // ✅ потом – progress (чтобы не было обращения к несуществующей переменной)
         const progress =
           typeof task.progress === "number"
             ? task.progress
@@ -90,8 +134,8 @@ export const ganttConverter = {
         return {
           id: task.id ?? task.Id,
           text: task.text ?? task.name ?? task.Name ?? "Новая задача",
-          start_date: this.formatDate(start),
-          duration: calcDuration(start, end),
+          start_date: startStr,                   
+          duration: calcDuration(startStr, endStr),
           progress,
           parent:
             task.parentId ??
@@ -100,8 +144,6 @@ export const ganttConverter = {
             task.ParentTaskId ??
             task.parent,
           type: task.type ?? task.Type ?? "task",
-
-          // это нужно для чекбокса в колонке "Готово"
           isCompleted: Boolean(isCompleted),
         };
       }),
@@ -125,9 +167,11 @@ export const ganttConverter = {
         projectId: projectId ?? task.projectId ?? null,
         name: task.text,
         description: task.description ?? "",
-        isCompleted: Boolean(task.isCompleted ?? (task.progress && task.progress >= 1)),
-        startTime: this.parseDate(task.start_date),
-        endTime: this.addDuration(task.start_date, task.duration),
+        isCompleted: Boolean(
+          task.isCompleted ?? (task.progress && task.progress >= 1)
+        ),
+        startTime: toBackendStartIso(task.start_date),
+        endTime: toBackendEndIso(task.start_date, task.duration),
       })),
       links: ganttData.links.map((link) => ({
         parentId: link.source,
@@ -137,37 +181,21 @@ export const ganttConverter = {
     };
   },
 
+ 
   formatDate(dateInput) {
-    const date = ensureDate(dateInput) ?? new Date();
-    return date.toISOString().split("T")[0];
+    return toGanttDateString(dateInput);
   },
 
   parseDate(ganttDate) {
-    const date = ensureDate(ganttDate) ?? new Date();
-    return date.toISOString();
+    return toBackendStartIso(toGanttDateString(ganttDate));
   },
 
   addDuration(dateString, duration) {
-    const start = ensureDate(dateString) ?? new Date();
-    const days = Number(duration) || 1;
-    const end = new Date(start.getTime() + days * MS_IN_DAY);
-    return end.toISOString();
+    return toBackendEndIso(toGanttDateString(dateString), duration);
   },
 
-  formatDate(dateInput) {
-    const date = ensureDate(dateInput) ?? new Date();
-    return date.toISOString().split("T")[0];
-  },
 
-  parseDate(ganttDate) {
-    const date = ensureDate(ganttDate) ?? new Date();
-    return date.toISOString();
-  },
-
-  addDuration(dateString, duration) {
-    const start = ensureDate(dateString) ?? new Date();
-    const days = Number(duration) || 1;
-    const end = new Date(start.getTime() + days * MS_IN_DAY);
-    return end.toISOString();
-  },
+  toBackendStartIso,
+  toBackendEndIso,
+  toGanttDateString,
 };
