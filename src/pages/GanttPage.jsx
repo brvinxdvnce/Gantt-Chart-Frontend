@@ -10,18 +10,18 @@ const normalizeRole = (value) => {
     return "member";
   }
 
-  // 1) Чистое число
+
   if (typeof value === "number") {
-    return value === 1 ? "admin" : "member"; // 0 -> member, 1 -> admin
+    return value === 1 ? "admin" : "member"; 
   }
 
-  // 2) Строка, но в ней число
+
   const num = Number(value);
   if (!Number.isNaN(num)) {
     return num === 1 ? "admin" : "member";
   }
 
-  // 3) Строковые роли
+
   const role = String(value).toLowerCase();
 
   if (role === "admin") {
@@ -32,13 +32,19 @@ const normalizeRole = (value) => {
     return "member";
   }
 
-  // Всё непонятное — участник
+
   return "member";
 };
 
 
 const memberId = (member) => member?.user?.id ?? member?.id;
 
+const isGuid = (value) => {
+  if (typeof value !== "string") return false;
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
+    value
+  );
+};
 
 export default function GanttPage() {
   const { id } = useParams();
@@ -66,9 +72,20 @@ const [inviteError, setInviteError] = useState("");
     const response = await projectService.get(id);
     const data = response?.result ?? response;
 
+    console.log("PROJECT DATA:", data);           
+    console.log("PROJECT MEMBERS:", data?.members);
+
+    
+
     setProjectInfo(data);
     setMembers(data?.members ?? []);
     setInviteCodes(data?.inviteCodes ?? []);
+
+    
+
+    
+
+   
 
     const userId = user?.id ?? localStorage.getItem("userId");
 
@@ -302,60 +319,215 @@ if (
   })
 );
 
+evIds.push(
+  gantt.attachEvent("onBeforeLightbox", function (taskId) {
+    const task = gantt.getTask(taskId);
+
+  
+    const selectedIds = Array.isArray(task.performerIds)
+      ? task.performerIds.map(String)
+      : [];
+
+    const allMembers = gantt.config._members || [];
+
+    console.log("onBeforeLightbox members:", allMembers, "task:", task, "selectedIds:", selectedIds);
+
+    const itemsHtml = allMembers
+      .map((m) => {
+        const id = String(memberId(m));
+        const name =
+          m.user?.username ||
+          m.user?.email ||
+          m.username ||
+          m.email ||
+          id;
+
+        const checked = selectedIds.includes(id) ? "checked" : "";
+
+        return `
+          <label style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
+            <input type="checkbox" class="performer-checkbox" value="${id}" ${checked} />
+            <span>${name}</span>
+          </label>
+        `;
+      })
+      .join("");
+
+    task.performers_html = `
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <small>Отметьте ответственных (можно несколько):</small>
+        <div id="performers-list"
+             style="display:flex; flex-direction:column; gap:2px; max-height:140px; overflow-y:auto;">
+          ${itemsHtml}
+        </div>
+      </div>
+    `;
+
+    return true;
+  })
+);
+
+evIds.push(
+  gantt.attachEvent("onLightboxSave", function (taskId, task, is_new) {
+    if (!isGuid(taskId)) {
+      console.warn("Пропускаем сохранение исполнителей для временной задачи", taskId);
+      return true;
+    }
+
+    const lightbox = gantt.getLightbox();
+    if (!lightbox) return true;
+
+    const checkboxes = lightbox.querySelectorAll("input.performer-checkbox");
+    if (!checkboxes.length) return true;
+
+   
+    const selectedIds = Array.from(checkboxes)
+      .filter((ch) => ch.checked)
+      .map((ch) => String(ch.value));
+
+    
+    const oldUserIds = Array.isArray(task.performerIds)
+      ? task.performerIds.map(String)
+      : [];
+
+    const toAdd = selectedIds.filter((id) => !oldUserIds.includes(id));
+    const toRemove = oldUserIds.filter((id) => !selectedIds.includes(id));
+
+    console.log("SAVE PERFORMERS", {
+      taskId,
+      selectedIds,
+      oldUserIds,
+      toAdd,
+      toRemove,
+    });
+
+    if (!toAdd.length && !toRemove.length) {
+     
+      return true;
+    }
+
+   
+    task.performerIds = selectedIds;
+
+    (async () => {
+      try {
+        await Promise.all([
+         
+          ...toAdd.map((userId) =>
+            taskService.addUserPerformer(taskId, userId)
+          ),
+        
+          ...toRemove.map((userId) =>
+            taskService.removeUserPerformer(taskId, userId)
+          ),
+        ]);
+
+        console.log("Исполнители задачи обновлены");
+        await reload();
+      } catch (error) {
+        console.error("Ошибка обновления исполнителей задачи:", error);
+      }
+    })();
+
+    return true;
+  })
+);
+
+
+
     ganttEventIds.current = evIds;
   },
   [id]
 );
 
 
+  
+
   useEffect(() => {
     loadProject();
   }, [loadProject]);
 
   useEffect(() => {
-    if (ganttContainer.current && window.gantt) {
-      const gantt = window.gantt;
-      gantt.config.date_format = "%Y-%m-%d";
+  if (window.gantt) {
+    window.gantt.config._members = members || [];
+    console.log("set _members:", window.gantt.config._members);
+  }
+}, [members]);
 
-       gantt.config.columns = [
-      { name: "text", label: "Задача", tree: true, width: "*" },
-      {
-        name: "completed",
-        label: "Готово",
-        align: "center",
-        width: 70,
-        template: function (task) {
-          const checked = task.isCompleted ? "checked" : "";
-          return `<input type="checkbox" class="task-complete-checkbox" ${checked} />`;
-        },
-      },
-      { name: "start_date", label: "Начало", align: "center", width: 90 },
-      { name: "duration", label: "Длительность", align: "center", width: 70 },
-      { name: "add", label: "", width: 44 },
-    ];
+  useEffect(() => {
+  if (!ganttContainer.current || !window.gantt || ganttReady.current) return;
+
+  const gantt = window.gantt;
+  gantt.config.date_format = "%Y-%m-%d";
+
+  gantt.config.columns = [
+  { name: "text", label: "Задача", tree: true, width: "*" },
+  {
+    name: "completed",
+    label: "Готово",
+    align: "center",
+    width: 70,
+    template: function (task) {
+      const checked = task.isCompleted ? "checked" : "";
+      return `<input type="checkbox" class="task-complete-checkbox" ${checked} />`;
+    },
+  },
+  { name: "start_date", label: "Начало", align: "center", width: 90 },
+  { name: "duration", label: "Длительность", align: "center", width: 70 },
+  { name: "add", label: "", width: 44 },
+];
+
+  gantt.locale.labels.section_description = "Описание";
+  gantt.locale.labels.section_performers = "Ответственные";
+  gantt.locale.labels.section_time = "Время";
+
+  gantt.config.lightbox.sections = [
+    { name: "description", height: 38, map_to: "text", type: "textarea", focus: true },
+    { name: "performers", height: 80, type: "template", map_to: "performers" },
+    { name: "time", type: "duration", map_to: "auto" },
+  ];
+
+   gantt.config.lightbox.sections = [
+  {
+    name: "description",
+    height: 38,
+    map_to: "text",
+    type: "textarea",
+    focus: true,
+  },
+  {
+    name: "performers",
+    height: 80,
+    type: "template",
+    map_to: "performers_html", 
+  },
+  {
+    name: "time",
+    type: "duration",
+    map_to: "auto",
+  },
+];
 
 
-      gantt.init(ganttContainer.current);
-      ganttReady.current = true;
-      setupGanttEvents(gantt, loadProject);
-      loadProject();
-    }
 
-    return () => {
-      ganttReady.current = false;
-      if (window.gantt) {
+  gantt.init(ganttContainer.current);
+  ganttReady.current = true;
+  setupGanttEvents(gantt, loadProject);
 
-        if (ganttEventIds.current.length) {
+  return () => {
+    ganttReady.current = false;
+    if (window.gantt) {
+      if (ganttEventIds.current.length) {
         ganttEventIds.current.forEach((evId) => {
           window.gantt.detachEvent(evId);
         });
         ganttEventIds.current = [];
       }
-        window.gantt.clearAll?.();
-        window.gantt.destroy?.();
-      }
-    };
-  }, [id, loadProject, setupGanttEvents]);
+      window.gantt.clearAll?.();
+      window.gantt.destroy?.();
+    }
+  };
+}, [id, setupGanttEvents, loadProject]);
 
   const handleAddMember = async () => {
     if (!newMemberId.trim()) return;
@@ -387,17 +559,17 @@ if (
   const targetId = memberId(member);
   if (!targetId) return;
 
-  const currentRole = normalizeRole(member.role); // 'admin' | 'member'
+  const currentRole = normalizeRole(member.role); 
 
-  // admin -> member(0), member -> admin(1)
+ 
   const nextRoleEnum = currentRole === "admin" ? 0 : 1;
 
-  try {
-    await projectService.changeMemberRole(id, targetId, { role: nextRoleEnum });
-    await loadProject();
-  } catch (error) {
-    setMemberError(error.message || "Не удалось изменить роль участника");
-  }
+try {
+  await projectService.changeMemberRole(id, targetId, nextRoleEnum);
+  await loadProject();
+} catch (error) {
+  setMemberError(error.message || "Не удалось изменить роль участника");
+}
 };
 
   const deleteProject = async () => {
@@ -413,7 +585,7 @@ if (
 
   return (
   <div style={{ padding: "20px", maxWidth: "1400px", margin: "0 auto" }}>
-    {/* Шапка проекта */}
+    {}
     <div
       style={{
         background: "white",
@@ -469,7 +641,7 @@ if (
       )}
     </div>
 
-    {/* Коды приглашения – только для админа */}
+    {}
     {currentProject?.role === "admin" && inviteCodes?.length > 0 && (
       <div
         style={{
@@ -497,7 +669,7 @@ if (
       </div>
     )}
 
-    {/* Диаграмма Ганта */}
+    {}
     <div
       style={{
         background: "white",
@@ -523,7 +695,7 @@ if (
       />
     </div>
 
-    {/* Участники проекта – только для админа */}
+    {}
     {currentProject?.role === "admin" && (
       <div
         style={{

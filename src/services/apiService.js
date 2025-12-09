@@ -151,12 +151,13 @@ export const projectService = {
       method: "DELETE",
     });
   },
-  changeMemberRole(projectId, userId, dto) {
-    return request(`/projects/${projectId}/members/${userId}`, {
-      method: "PATCH",
-      body: dto,
-    });
-  },
+  changeMemberRole(projectId, userId, roleEnum) {
+  
+  return request(`/projects/${projectId}/members/${userId}`, {
+    method: "PATCH",
+    body: roleEnum, 
+  });
+},
 };
 
 export const teamService = {
@@ -219,6 +220,19 @@ export const taskService = {
   },
   removeUserPerformer(taskId, userId) {
     return request(`/tasks/${taskId}/performers/users?id=${userId}`, {
+      method: "DELETE",
+    });
+  },
+
+  addComment(taskId, dto) {
+    return request(`/tasks/${taskId}/comments`, {
+      method: "POST",
+      body: dto,
+    });
+  },
+
+  removeComment(taskId, commentId) {
+    return request(`/tasks/${taskId}/comments?commentId=${commentId}`, {
       method: "DELETE",
     });
   },

@@ -22,7 +22,7 @@ function calcDuration(start, end) {
   const to = ensureDate(end);
   if (!from || !to) return 1;
 
-  // считаем разницу по дням без учёта часов, чтобы таймзона не портила
+
   const fromMidnight = new Date(from.getFullYear(), from.getMonth(), from.getDate());
   const toMidnight = new Date(to.getFullYear(), to.getMonth(), to.getDate());
 
@@ -30,9 +30,7 @@ function calcDuration(start, end) {
   return Math.max(1, diffDays || 1);
 }
 
-// ---------- ХЕЛПЕРЫ ДАТ ----------
 
-// Только дата для Gantt: "YYYY-MM-DD"
 function toGanttDateString(value) {
   if (typeof value === "string" && value.length >= 10) {
     return value.slice(0, 10);
@@ -94,6 +92,57 @@ function mergeTasks(structure = {}) {
   return tasks.filter(Boolean);
 }
 
+
+function extractPerformerIds(task) {
+  
+  const performers = task.performers || task.Performers;
+  if (Array.isArray(performers)) {
+    return performers
+      .map((p) =>
+        p.userId ??
+        p.UserId ??
+        p.user?.id ??
+        p.User?.Id ??
+        null
+      )
+      .filter(Boolean);
+  }
+
+  if (Array.isArray(task.userPerformers)) {
+    return task.userPerformers
+      .map((p) =>
+        p.userId ??
+        p.UserId ??
+        p.user?.id ??
+        p.User?.Id ??
+        null
+      )
+      .filter(Boolean);
+  }
+  if (Array.isArray(task.UserPerformers)) {
+    return task.UserPerformers
+      .map((p) =>
+        p.userId ??
+        p.UserId ??
+        p.user?.id ??
+        p.User?.Id ??
+        null
+      )
+      .filter(Boolean);
+  }
+
+  if (Array.isArray(task.performerIds)) {
+    return task.performerIds.filter(Boolean);
+  }
+  if (Array.isArray(task.PerformerIds)) {
+    return task.PerformerIds.filter(Boolean);
+  }
+
+  return [];
+}
+
+
+
 export const ganttConverter = {
   toGanttFormat(backendData = {}) {
     const tasks = mergeTasks(backendData);
@@ -131,6 +180,38 @@ export const ganttConverter = {
             ? task.progress
             : (isCompleted ? 1 : 0);
 
+             const performersRaw =
+          task.performers ||
+          task.Performers ||
+          task.taskPerformers ||
+          task.TaskPerformers ||
+          task.userPerformers ||
+          task.UserPerformers ||
+          [];
+
+        const performerMap = {};   
+        const performerUserIds = [];
+
+       performersRaw.forEach((p) => {
+  
+  const userId =
+    p.id ??
+    p.Id ??
+    p.userId ??
+    p.UserId ??
+    p.user?.id ??
+    p.User?.Id ??
+    null;
+
+  if (!userId) return;
+
+  const s = String(userId);
+  performerUserIds.push(s);
+
+
+  performerMap[s] = s;
+});
+
         return {
           id: task.id ?? task.Id,
           text: task.text ?? task.name ?? task.Name ?? "Новая задача",
@@ -145,6 +226,10 @@ export const ganttConverter = {
             task.parent,
           type: task.type ?? task.Type ?? "task",
           isCompleted: Boolean(isCompleted),
+
+           performerIds: performerUserIds,
+
+           performerMap,
         };
       }),
 
