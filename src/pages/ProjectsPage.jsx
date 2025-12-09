@@ -1,15 +1,52 @@
 import { useContext, useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext.jsx";
-import { projectService } from "../services/apiService.js";
+import { projectService, inviteService } from "../services/apiService.js";
 
-const roleToBadge = (role) => {
-  if (role === 0 || role === 1 || role === "Creator" || role === "Admin") {
+const roleToBadge = (value) => {
+  if (value === null || value === undefined) {
+    return "member";
+  }
+
+  if (typeof value === "number") {
+    return value === 1 ? "admin" : "member";
+  }
+
+  const num = Number(value);
+  if (!Number.isNaN(num)) {
+    return num === 1 ? "admin" : "member";
+  }
+
+  const role = String(value).toLowerCase();
+
+  if (role === "admin") {
     return "admin";
+  }
+
+  if (role === "member" || role === "user") {
+    return "member";
   }
 
   return "member";
 };
+
+const getProjectRole = (project, currentUserId) => {
+
+  if (
+    !currentUserId
+    ? false
+    : project.creatorId === currentUserId ||
+      project.creator?.id === currentUserId ||      
+      project.creatorUserId === currentUserId       
+  ) {
+    return "admin";
+  }
+
+
+  const raw = project.currentUserRole ?? project.role;
+  return roleToBadge(raw);
+};
+
 
 export default function ProjectsPage() {
   const { user, setProject } = useContext(AuthContext);
@@ -21,8 +58,14 @@ export default function ProjectsPage() {
   const [error, setError] = useState("");
   const [form, setForm] = useState({ name: "", deadLine: "" });
 
+  const [inviteCode, setInviteCode] = useState("");
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+  const [inviteSuccess, setInviteSuccess] = useState("");
+
   const canCreate = useMemo(() => form.name.trim().length > 0, [form.name]);
 
+  
   const loadProjects = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
@@ -30,7 +73,7 @@ export default function ProjectsPage() {
     try {
       const data = await projectService.list(user.id);
       setProjects(Array.isArray(data) ? data : []);
-      console.log(Array.isArray(data) ? data : []);
+      console.log("projects:", Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err.message || "Не удалось загрузить проекты");
     } finally {
@@ -51,7 +94,7 @@ export default function ProjectsPage() {
       const dto = {
         name: form.name.trim(),
         creatorId: user.id,
-        deadLine: form.deadLine ? new Date(form.deadLine).toISOString() : null
+        deadLine: form.deadLine ? new Date(form.deadLine).toISOString() : null,
       };
       await projectService.create(dto);
       await loadProjects();
@@ -63,11 +106,31 @@ export default function ProjectsPage() {
     }
   };
 
-  const openProject = (project) => {
-    const currentRole = roleToBadge(project.currentUserRole ?? project.role);
-    setProject(project, currentRole);
-    navigate(`/projects/${project.id}`);
+  const handleJoinByCode = async () => {
+    if (!user?.id || !inviteCode.trim()) return;
+
+    setInviteError("");
+    setInviteSuccess("");
+    setInviteLoading(true);
+
+    try {
+      await inviteService.join(inviteCode.trim(), user.id);
+      setInviteSuccess("Вы успешно присоединились к проекту по коду");
+      setInviteCode("");
+      await loadProjects();
+    } catch (err) {
+      console.error("Ошибка присоединения по коду:", err);
+      setInviteError(err.message || "Не удалось присоединиться по коду");
+    } finally {
+      setInviteLoading(false);
+    }
   };
+
+  const openProject = (project) => {
+  const currentRole = getProjectRole(project, user?.id);
+  setProject(project, currentRole);
+  navigate(`/projects/${project.id}`);
+};
 
   if (loading) {
     return <div className="projects-loading">Загрузка проектов...</div>;
@@ -103,7 +166,45 @@ export default function ProjectsPage() {
             {creating ? "Создание..." : "Создать"}
           </button>
         </div>
-        {error && <div className="error-message" style={{ marginTop: 16 }}>{error}</div>}
+        {error && (
+          <div className="error-message" style={{ marginTop: 16 }}>
+            {error}
+          </div>
+        )}
+      </div>
+
+      <div className="join-by-code-form" style={{ marginTop: 24 }}>
+        <h3>Присоединиться к проекту по коду</h3>
+        <div className="form-row">
+          <input
+            type="text"
+            placeholder="Код приглашения (например, ABC123)"
+            value={inviteCode}
+            onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+            className="form-input"
+            style={{ maxWidth: 250 }}
+          />
+          <button
+            className="btn-primary"
+            onClick={handleJoinByCode}
+            disabled={inviteLoading || !inviteCode.trim()}
+          >
+            {inviteLoading ? "Подключение..." : "Подключиться"}
+          </button>
+        </div>
+        {inviteError && (
+          <div className="error-message" style={{ marginTop: 12 }}>
+            {inviteError}
+          </div>
+        )}
+        {inviteSuccess && (
+          <div
+            className="success-message"
+            style={{ marginTop: 12, color: "green" }}
+          >
+            {inviteSuccess}
+          </div>
+        )}
       </div>
 
       {projects.length === 0 ? (
@@ -121,18 +222,23 @@ export default function ProjectsPage() {
             >
               <div className="project-header">
                 <h2 className="project-name">{project.name}</h2>
-                <span className={`role-badge ${roleToBadge(project.currentUserRole ?? project.role)}`}>
-                  {roleToBadge(project.currentUserRole ?? project.role) === "admin"
-                    ? "Админ"
-                    : "Участник"}
-                </span>
+               <span
+  className={`role-badge ${getProjectRole(project, user?.id)}`}
+>
+  {getProjectRole(project, user?.id) === "admin"
+    ? "Админ"
+    : "Участник"}
+</span>
               </div>
               <div className="project-details">
                 <p className="project-meta">
                   Участников: {project.usersCount ?? project.members?.length ?? 1}
                 </p>
                 <p className="project-creator">
-                  Создатель: {project.creatorNickName ?? project.creator?.username ?? "—"}
+                  Создатель:{" "}
+                  {project.creatorNickName ??
+                    project.creator?.username ??
+                    "—"}
                 </p>
                 {project.deadLine && (
                   <p className="project-meta">

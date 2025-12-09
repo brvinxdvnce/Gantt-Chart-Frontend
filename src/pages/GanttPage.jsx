@@ -4,12 +4,38 @@ import { AuthContext } from "../context/AuthContext.jsx";
 import { projectService, taskService } from "../services/apiService.js";
 import { ganttConverter } from "../services/ganttConverter.js";
 
+
 const normalizeRole = (value) => {
-  if (value === 0 || value === 1 || value === "Creator" || value === "Admin") {
+  if (value === null || value === undefined) {
+    return "member";
+  }
+
+  // 1) Чистое число
+  if (typeof value === "number") {
+    return value === 1 ? "admin" : "member"; // 0 -> member, 1 -> admin
+  }
+
+  // 2) Строка, но в ней число
+  const num = Number(value);
+  if (!Number.isNaN(num)) {
+    return num === 1 ? "admin" : "member";
+  }
+
+  // 3) Строковые роли
+  const role = String(value).toLowerCase();
+
+  if (role === "admin") {
     return "admin";
   }
+
+  if (role === "member" || role === "user") {
+    return "member";
+  }
+
+  // Всё непонятное — участник
   return "member";
 };
+
 
 const memberId = (member) => member?.user?.id ?? member?.id;
 
@@ -17,11 +43,12 @@ const memberId = (member) => member?.user?.id ?? member?.id;
 export default function GanttPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { currentProject, setProject } = useContext(AuthContext);
+   const { currentProject, setProject, user } = useContext(AuthContext);
   const ganttContainer = useRef(null);
   const ganttReady = useRef(false);
    const ganttEventIds = useRef([]);
    const isStatusUpdateRef = useRef(false);
+   
 
   const [showAddMember, setShowAddMember] = useState(false);
   const [newMemberId, setNewMemberId] = useState("");
@@ -29,8 +56,10 @@ export default function GanttPage() {
   const [memberError, setMemberError] = useState("");
   const [loading, setLoading] = useState(true);
   const [projectInfo, setProjectInfo] = useState(null);
+const [inviteCodes, setInviteCodes] = useState([]); 
+const [inviteError, setInviteError] = useState("");
 
-  const loadProject = useCallback(async () => {
+ const loadProject = useCallback(async () => {
   if (!id) return;
   try {
     setLoading(true);
@@ -39,31 +68,35 @@ export default function GanttPage() {
 
     setProjectInfo(data);
     setMembers(data?.members ?? []);
+    setInviteCodes(data?.inviteCodes ?? []);
 
-    const userId = localStorage.getItem("userId");
+    const userId = user?.id ?? localStorage.getItem("userId");
 
+    let role;
 
-    let role = currentProject?.role;
+    const isCreator =
+      data?.creatorId === userId || data?.creator?.id === userId;
 
-    if (!role && data?.members && userId) {
+    if (isCreator) {
+      role = "admin";
+    } else if (data?.members && userId) {
       const me = data.members.find((m) => memberId(m) === userId);
       if (me) {
         role = normalizeRole(me.role);
       }
     }
 
-  
-    if (!role && data?.creator?.id === userId) {
-      role = "admin";
-    }
-
     if (!role) {
-      role = "member";
-    }
+  role = "member";
+}
 
-    if (data?.id) {
-      setProject({ id: data.id, name: data.name }, role);
-    }
+
+if (
+  data?.id &&
+  (!currentProject || currentProject.id !== data.id || !currentProject.role)
+) {
+  setProject({ id: data.id, name: data.name }, role);
+}
 
     if (ganttReady.current && window.gantt) {
       const gantt = window.gantt;
@@ -72,17 +105,15 @@ export default function GanttPage() {
         ganttConverter.toGanttFormat({
           rootTask: data?.rootTask,
           tasks: data?.tasks,
-    })
-  );
-}
-
+        })
+      );
+    }
   } catch (error) {
     console.error("Ошибка загрузки проекта:", error);
   } finally {
     setLoading(false);
   }
-}, [id]);
-
+}, [id, user?.id]);
 
 
 
@@ -353,19 +384,21 @@ export default function GanttPage() {
   };
 
   const handleToggleRole = async (member) => {
-    const targetId = memberId(member);
-    if (!targetId) return;
+  const targetId = memberId(member);
+  if (!targetId) return;
 
-    const currentRole = normalizeRole(member.role);
-    const nextRole = currentRole === "admin" ? "User" : "Admin";
+  const currentRole = normalizeRole(member.role); // 'admin' | 'member'
 
-    try {
-      await projectService.changeMemberRole(id, targetId, { role: nextRole });
-      await loadProject();
-    } catch (error) {
-      setMemberError(error.message || "Не удалось изменить роль участника");
-    }
-  };
+  // admin -> member(0), member -> admin(1)
+  const nextRoleEnum = currentRole === "admin" ? 0 : 1;
+
+  try {
+    await projectService.changeMemberRole(id, targetId, { role: nextRoleEnum });
+    await loadProject();
+  } catch (error) {
+    setMemberError(error.message || "Не удалось изменить роль участника");
+  }
+};
 
   const deleteProject = async () => {
     if (!window.confirm("Удалить проект?")) return;
@@ -379,207 +412,245 @@ export default function GanttPage() {
   };
 
   return (
-    <div style={{ padding: "20px", maxWidth: "1400px", margin: "0 auto" }}>
+  <div style={{ padding: "20px", maxWidth: "1400px", margin: "0 auto" }}>
+    {/* Шапка проекта */}
+    <div
+      style={{
+        background: "white",
+        padding: "20px",
+        borderRadius: "8px",
+        marginBottom: "20px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+      }}
+    >
+      <div>
+        <h1 style={{ margin: "0 0 5px 0" }}>
+          {projectInfo?.name ?? currentProject?.name}
+        </h1>
+        <div style={{ color: "#666" }}>
+          Роль:{" "}
+          <strong>
+            {currentProject?.role === "admin" ? "Админ" : "Участник"}
+          </strong>
+        </div>
+      </div>
+
+      {currentProject?.role === "admin" && (
+        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          <button
+            onClick={() => setShowAddMember(true)}
+            style={{
+              padding: "8px 16px",
+              background: "#28a745",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}
+          >
+            Добавить участника
+          </button>
+          <button
+            onClick={deleteProject}
+            style={{
+              padding: "8px 16px",
+              background: "#dc3545",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}
+          >
+            Удалить проект
+          </button>
+        </div>
+      )}
+    </div>
+
+    {/* Коды приглашения – только для админа */}
+    {currentProject?.role === "admin" && inviteCodes?.length > 0 && (
+      <div
+        style={{
+          background: "#fff3cd",
+          border: "1px solid #ffeeba",
+          color: "#856404",
+          padding: "10px 15px",
+          borderRadius: "4px",
+          marginBottom: "15px",
+        }}
+      >
+        <div style={{ marginBottom: "5px" }}>
+          Коды приглашения для этого проекта:
+        </div>
+        <ul style={{ margin: 0, paddingLeft: "20px" }}>
+          {inviteCodes.map((inv) => (
+            <li
+              key={inv.code}
+              style={{ fontFamily: "monospace", fontSize: "16px" }}
+            >
+              {inv.code}
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
+
+    {/* Диаграмма Ганта */}
+    <div
+      style={{
+        background: "white",
+        borderRadius: "8px",
+        marginBottom: "20px",
+        overflow: "hidden",
+      }}
+    >
+      <div style={{ padding: "15px 20px", borderBottom: "1px solid #eee" }}>
+        <h3 style={{ margin: 0 }}>Диаграмма Ганта</h3>
+        {loading && (
+          <span style={{ marginLeft: "10px", color: "#666" }}>
+            Загрузка...
+          </span>
+        )}
+      </div>
+      <div
+        ref={ganttContainer}
+        style={{
+          height: "500px",
+          width: "100%",
+        }}
+      />
+    </div>
+
+    {/* Участники проекта – только для админа */}
+    {currentProject?.role === "admin" && (
       <div
         style={{
           background: "white",
           padding: "20px",
           borderRadius: "8px",
-          marginBottom: "20px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
         }}
       >
-        <div>
-          <h1 style={{ margin: "0 0 5px 0" }}>{projectInfo?.name ?? currentProject?.name}</h1>
-          <div style={{ color: "#666" }}>
-            Роль:{" "}
-            <strong>
-              {currentProject?.role === "admin" ? "Админ" : "Участник"}
-            </strong>
-          </div>
-        </div>
-
-        {currentProject?.role === "admin" && (
-          <div style={{ display: "flex", gap: "10px" }}>
+        <h3 style={{ margin: "0 0 15px 0" }}>Участники проекта</h3>
+        {showAddMember && (
+          <div style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
+            <input
+              type="text"
+              placeholder="ID пользователя (UUID)"
+              value={newMemberId}
+              onChange={(e) => setNewMemberId(e.target.value)}
+              style={{
+                padding: "8px 12px",
+                border: "1px solid #ddd",
+                borderRadius: "4px",
+                flex: 1,
+              }}
+            />
             <button
-              onClick={() => setShowAddMember(true)}
+              onClick={handleAddMember}
               style={{
                 padding: "8px 16px",
-                background: "#28a745",
+                background: "#007bff",
                 color: "white",
                 border: "none",
                 borderRadius: "4px",
                 cursor: "pointer",
               }}
             >
-              Добавить участника
+              Добавить
             </button>
             <button
-              onClick={deleteProject}
+              onClick={() => setShowAddMember(false)}
               style={{
                 padding: "8px 16px",
-                background: "#dc3545",
+                background: "#6c757d",
                 color: "white",
                 border: "none",
                 borderRadius: "4px",
                 cursor: "pointer",
               }}
             >
-              Удалить проект
+              Отмена
             </button>
           </div>
         )}
-      </div>
-
-      <div
-        style={{
-          background: "white",
-          borderRadius: "8px",
-          marginBottom: "20px",
-          overflow: "hidden",
-        }}
-      >
-        <div style={{ padding: "15px 20px", borderBottom: "1px solid #eee" }}>
-          <h3 style={{ margin: 0 }}>Диаграмма Ганта</h3>
-          {loading && (
-            <span style={{ marginLeft: "10px", color: "#666" }}>Загрузка...</span>
-          )}
-        </div>
-        <div
-          ref={ganttContainer}
-          style={{
-            height: "500px",
-            width: "100%",
-          }}
-        />
-      </div>
-      {currentProject?.role === "admin" && (
-        <div
-          style={{
-            background: "white",
-            padding: "20px",
-            borderRadius: "8px",
-          }}
-        >
-          <h3 style={{ margin: "0 0 15px 0" }}>Участники проекта</h3>
-          {showAddMember && (
-            <div style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
-              <input
-                type="text"
-                placeholder="ID пользователя (UUID)"
-                value={newMemberId}
-                onChange={(e) => setNewMemberId(e.target.value)}
-                style={{
-                  padding: "8px 12px",
-                  border: "1px solid #ddd",
-                  borderRadius: "4px",
-                  flex: 1,
-                }}
-              />
-              <button
-                onClick={handleAddMember}
-                style={{
-                  padding: "8px 16px",
-                  background: "#007bff",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                }}
-              >
-                Добавить
-              </button>
-              <button
-                onClick={() => setShowAddMember(false)}
-                style={{
-                  padding: "8px 16px",
-                  background: "#6c757d",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                }}
-              >
-                Отмена
-              </button>
-            </div>
-          )}
-          {memberError && (
-            <div
-              className="error-message"
-              style={{ marginBottom: "15px" }}
-            >
-              {memberError}
-            </div>
-          )}
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            {members.map((member) => {
-              const formattedRole = normalizeRole(member.role);
-              return (
-                <div
-                  key={memberId(member)}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "10px",
-                    background: "#f8f9fa",
-                    borderRadius: "4px",
-                  }}
-                >
-                  <div>
-                    {member.email ?? member.username ?? memberId(member)}
-                    <span
-                      style={{
-                        marginLeft: "10px",
-                        padding: "2px 8px",
-                        background: formattedRole === "admin" ? "#dc3545" : "#6c757d",
-                        color: "white",
-                        borderRadius: "12px",
-                        fontSize: "12px",
-                      }}
-                    >
-                      {formattedRole === "admin" ? "Админ" : "Участник"}
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", gap: "8px" }}>
-                    <button
-                      onClick={() => handleToggleRole(member)}
-                      style={{
-                        padding: "4px 8px",
-                        background: formattedRole === "admin" ? "#6c757d" : "#007bff",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "3px",
-                        cursor: "pointer",
-                        fontSize: "12px",
-                      }}
-                    >
-                      {formattedRole === "admin" ? "Убрать админа" : "Сделать админом"}
-                    </button>
-                    <button
-                      onClick={() => handleRemoveMember(member)}
-                      style={{
-                        padding: "4px 8px",
-                        background: "#dc3545",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "3px",
-                        cursor: "pointer",
-                        fontSize: "12px",
-                      }}
-                    >
-                      Удалить
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+        {memberError && (
+          <div className="error-message" style={{ marginBottom: "15px" }}>
+            {memberError}
           </div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {members.map((member) => {
+            const formattedRole = normalizeRole(member.role);
+            return (
+              <div
+                key={memberId(member)}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "10px",
+                  background: "#f8f9fa",
+                  borderRadius: "4px",
+                }}
+              >
+                <div>
+                  {member.email ?? member.username ?? memberId(member)}
+                  <span
+                    style={{
+                      marginLeft: "10px",
+                      padding: "2px 8px",
+                      background:
+                        formattedRole === "admin" ? "#dc3545" : "#6c757d",
+                      color: "white",
+                      borderRadius: "12px",
+                      fontSize: "12px",
+                    }}
+                  >
+                    {formattedRole === "admin" ? "Админ" : "Участник"}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    onClick={() => handleToggleRole(member)}
+                    style={{
+                      padding: "4px 8px",
+                      background:
+                        formattedRole === "admin" ? "#6c757d" : "#007bff",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "3px",
+                      cursor: "pointer",
+                      fontSize: "12px",
+                    }}
+                  >
+                    {formattedRole === "admin"
+                      ? "Убрать админа"
+                      : "Сделать админом"}
+                  </button>
+                  <button
+                    onClick={() => handleRemoveMember(member)}
+                    style={{
+                      padding: "4px 8px",
+                      background: "#dc3545",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "3px",
+                      cursor: "pointer",
+                      fontSize: "12px",
+                    }}
+                  >
+                    Удалить
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
-      )}
-    </div>
-  );
+      </div>
+    )}
+  </div>
+);
+
 }

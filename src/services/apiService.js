@@ -1,6 +1,7 @@
 const API_ORIGIN = import.meta.env?.VITE_API_URL ?? 'http://localhost:5056';
 const API_URL = `${API_ORIGIN}/api`;
 
+
 const defaultHeaders = {
   "Content-Type": "application/json",
 };
@@ -67,6 +68,44 @@ async function request(path, { method = "GET", body, headers = {} } = {}) {
     throw error;
   }
 }
+
+export const inviteService = {
+  
+  async generate(projectId) {
+  
+    return request(`/projects/${projectId}/invite`, {
+      method: "POST",
+    });
+  },
+
+  
+  async join(inviteCode, userId) {
+    const token = localStorage.getItem("jwt_token");
+
+    const response = await fetch(
+      `${API_ORIGIN}/invite/${encodeURIComponent(inviteCode)}?userId=${encodeURIComponent(
+        userId
+      )}`,
+      {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const text = await response.text();
+      const message = text || `Ошибка ${response.status}`;
+      const error = new Error(message);
+      error.status = response.status;
+      throw error;
+    }
+
+    return true;
+  },
+};
 
 export const userService = {
   register(dto) {
