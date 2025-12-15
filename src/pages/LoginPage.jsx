@@ -173,24 +173,7 @@ export default function LoginPage() {
         </form>
 
         <div style={{ marginTop: "20px", textAlign: "center" }}>
-          {!isRegistering && (
-            <button
-              onClick={bypassAuth}
-              style={{
-                padding: "12px 24px",
-                background: "#ffc107",
-                color: "black",
-                border: "none",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontWeight: "bold",
-                fontSize: "14px",
-                marginBottom: "8px",
-              }}
-            >
-              тппло
-            </button>
-          )}
+          {!isRegistering}
 
           <button
             onClick={() => setIsRegistering(!isRegistering)}

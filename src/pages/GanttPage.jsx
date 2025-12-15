@@ -175,16 +175,46 @@ if (
     const evIds = [];
 
     evIds.push(
-      gantt.attachEvent("onAfterTaskAdd", async (taskId, task) => {
-        try {
-          console.log("onAfterTaskAdd", taskId, task);
-          await taskService.createTask(toTaskDto(task));
-          await reload();
-        } catch (error) {
-          console.error("Ошибка создания задачи:", error);
-        }
-      })
-    );
+  gantt.attachEvent("onAfterTaskAdd", async (taskId, task) => {
+    try {
+      console.log("onAfterTaskAdd", taskId, task);
+
+
+      const res = await taskService.createTask(toTaskDto(task));
+
+      
+      const backendTaskId =
+        typeof res === "string"
+          ? res
+          : res?.id ?? res?.Id ?? res?.taskId ?? res?.TaskId ?? res?.result;
+
+      console.log("Создана задача на бэке, id:", backendTaskId);
+
+    
+      if (
+        backendTaskId &&
+        Array.isArray(task._pendingPerformerIds) &&
+        task._pendingPerformerIds.length
+      ) {
+        console.log(
+          "Назначаем ответственных при создании задачи:",
+          task._pendingPerformerIds
+        );
+
+        await Promise.all(
+          task._pendingPerformerIds.map((userId) =>
+            taskService.addUserPerformer(backendTaskId, userId)
+          )
+        );
+      }
+
+      await reload();
+    } catch (error) {
+      console.error("Ошибка создания задачи:", error);
+    }
+  })
+);
+
 
     evIds.push(
       gantt.attachEvent("onAfterTaskUpdate", async (taskId, task) => {
@@ -369,23 +399,18 @@ evIds.push(
 
 evIds.push(
   gantt.attachEvent("onLightboxSave", function (taskId, task, is_new) {
-    if (!isGuid(taskId)) {
-      console.warn("Пропускаем сохранение исполнителей для временной задачи", taskId);
-      return true;
-    }
-
     const lightbox = gantt.getLightbox();
     if (!lightbox) return true;
 
     const checkboxes = lightbox.querySelectorAll("input.performer-checkbox");
     if (!checkboxes.length) return true;
 
-   
+ 
     const selectedIds = Array.from(checkboxes)
       .filter((ch) => ch.checked)
-      .map((ch) => String(ch.value));
+      .map((ch) => String(ch.value)); 
 
-    
+   
     const oldUserIds = Array.isArray(task.performerIds)
       ? task.performerIds.map(String)
       : [];
@@ -401,18 +426,28 @@ evIds.push(
       toRemove,
     });
 
+    
+    task.performerIds = selectedIds;
+    task._pendingPerformerIds = selectedIds;
+
+  
+    if (!isGuid(taskId)) {
+      console.log(
+        "Новая (временная) задача – исполнили только локальное сохранение исполнителей"
+      );
+      return true;
+    }
+
+    
     if (!toAdd.length && !toRemove.length) {
      
       return true;
     }
 
-   
-    task.performerIds = selectedIds;
-
     (async () => {
       try {
         await Promise.all([
-         
+          
           ...toAdd.map((userId) =>
             taskService.addUserPerformer(taskId, userId)
           ),
@@ -432,6 +467,7 @@ evIds.push(
     return true;
   })
 );
+
 
 
 
@@ -477,7 +513,7 @@ evIds.push(
   { name: "add", label: "", width: 44 },
 ];
 
-  gantt.locale.labels.section_description = "Описание";
+  gantt.locale.labels.section_description = "Название";
   gantt.locale.labels.section_performers = "Ответственные";
   gantt.locale.labels.section_time = "Время";
 
@@ -611,7 +647,7 @@ try {
 
       {currentProject?.role === "admin" && (
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-          <button
+          {/* <button
             onClick={() => setShowAddMember(true)}
             style={{
               padding: "8px 16px",
@@ -623,7 +659,7 @@ try {
             }}
           >
             Добавить участника
-          </button>
+          </button> */}
           <button
             onClick={deleteProject}
             style={{
