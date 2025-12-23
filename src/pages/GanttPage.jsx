@@ -362,15 +362,15 @@ evIds.push(
 
     console.log("onBeforeLightbox members:", allMembers, "task:", task, "selectedIds:", selectedIds);
 
-    const itemsHtml = allMembers
-      .map((m) => {
-        const id = String(memberId(m));
-        const name =
-          m.user?.username ||
-          m.user?.email ||
-          m.username ||
-          m.email ||
-          id;
+   const itemsHtml = allMembers
+  .map((m) => {
+    const id = String(memberId(m));
+    const name =
+      m.user?.nickName || 
+      m.user?.username ||
+      m.username ||
+      m.email ||         
+      id;
 
         const checked = selectedIds.includes(id) ? "checked" : "";
 
@@ -646,35 +646,36 @@ try {
       </div>
 
       {currentProject?.role === "admin" && (
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-          {/* <button
-            onClick={() => setShowAddMember(true)}
-            style={{
-              padding: "8px 16px",
-              background: "#28a745",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer",
-            }}
-          >
-            Добавить участника
-          </button> */}
-          <button
-            onClick={deleteProject}
-            style={{
-              padding: "8px 16px",
-              background: "#dc3545",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer",
-            }}
-          >
-            Удалить проект
-          </button>
-        </div>
-      )}
+  <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+    <button
+      onClick={() => navigate(-1)}
+      style={{
+        padding: "8px 16px",
+        background: "#6c757d",
+        color: "white",
+        border: "none",
+        borderRadius: "4px",
+        cursor: "pointer",
+      }}
+    >
+          Назад
+        </button>
+        <button
+          onClick={deleteProject}
+          style={{
+            padding: "8px 16px",
+            background: "#dc3545",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+          }}
+        >
+          Удалить проект
+        </button>
+      </div>
+    )}
+
     </div>
 
     {}
@@ -791,6 +792,9 @@ try {
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           {members.map((member) => {
             const formattedRole = normalizeRole(member.role);
+            const getMemberDisplayName = (member) =>
+  member.user?.nickName ?? member.user?.username ?? memberId(member);
+
             return (
               <div
                 key={memberId(member)}
@@ -804,7 +808,7 @@ try {
                 }}
               >
                 <div>
-                  {member.email ?? member.username ?? memberId(member)}
+                  {getMemberDisplayName(member)}
                   <span
                     style={{
                       marginLeft: "10px",

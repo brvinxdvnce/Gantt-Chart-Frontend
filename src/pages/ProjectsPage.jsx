@@ -83,7 +83,8 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     loadProjects();
-  }, [loadProjects]);
+    setProject(null, null);
+  },  [loadProjects, setProject]);
 
   const handleCreate = async () => {
     if (!canCreate || !user?.id) return;
@@ -143,35 +144,50 @@ export default function ProjectsPage() {
       </div>
 
       <div className="create-project-form">
-        <h3>Создать проект</h3>
-        <div className="form-row">
-          <input
-            type="text"
-            placeholder="Название проекта"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className="form-input"
-          />
-          <input
-            type="date"
-            value={form.deadLine}
-            onChange={(e) => setForm({ ...form, deadLine: e.target.value })}
-            className="form-input"
-          />
-          <button
-            className="btn-success"
-            onClick={handleCreate}
-            disabled={!canCreate || creating}
-          >
-            {creating ? "Создание..." : "Создать"}
-          </button>
-        </div>
-        {error && (
-          <div className="error-message" style={{ marginTop: 16 }}>
-            {error}
-          </div>
-        )}
-      </div>
+      <h3>Создать проект</h3>
+      <div
+        className="form-row"
+        style={{ display: "flex", alignItems: "flex-end", gap: "12px" }}
+      >
+    
+    <input
+      type="text"
+      placeholder="Название проекта"
+      value={form.name}
+      onChange={(e) => setForm({ ...form, name: e.target.value })}
+      className="form-input"
+      style={{ flex: 1 }}
+    />
+
+   
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      <label
+        htmlFor="deadLine"
+        style={{ marginBottom: 4, fontSize: 14, fontWeight: 500 }}
+      >
+        Дедлайн
+      </label>
+      <input
+        id="deadLine"
+        type="date"
+        value={form.deadLine}
+        onChange={(e) => setForm({ ...form, deadLine: e.target.value })}
+        className="form-input"
+        style={{ padding: "6px 8px", borderRadius: 4, border: "1px solid #ccc" }}
+      />
+    </div>
+
+   
+    <button
+      className="btn-success"
+      onClick={handleCreate}
+      disabled={!canCreate || creating}
+    >
+      {creating ? "Создание..." : "Создать"}
+    </button>
+  </div>
+</div>
+
 
       <div className="join-by-code-form" style={{ marginTop: 24 }}>
         <h3>Присоединиться к проекту по коду</h3>

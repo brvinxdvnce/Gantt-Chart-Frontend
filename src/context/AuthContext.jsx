@@ -35,12 +35,17 @@ export function AuthProvider({ children }) {
   }, []);
 
   const setProject = (project, role) => {
-    setCurrentProject({
-      id: project.id,
-      name: project.name,
-      role: role,
-    });
-  };
+  if (!project) {
+    setCurrentProject(null);
+    return;
+  }
+
+  setCurrentProject({
+    id: project.id,
+    name: project.name,
+    role: role
+  });
+};
 
   useEffect(() => {
     const handleUnauthorized = () => {
