@@ -189,7 +189,7 @@ export default function ProjectsPage() {
 </div>
 
 
-      <div className="join-by-code-form" style={{ marginTop: 24 }}>
+      <div className="join-by-code-form" style={{ marginTop: 24, marginBottom: 40}}>
         <h3>Присоединиться к проекту по коду</h3>
         <div className="form-row">
           <input

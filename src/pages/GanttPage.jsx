@@ -383,15 +383,30 @@ evIds.push(
       })
       .join("");
 
-    task.performers_html = `
-      <div style="display:flex; flex-direction:column; gap:4px;">
-        <small>Отметьте ответственных (можно несколько):</small>
-        <div id="performers-list"
-             style="display:flex; flex-direction:column; gap:2px; max-height:140px; overflow-y:auto;">
-          ${itemsHtml}
-        </div>
-      </div>
-    `;
+  task.performers_html = `
+  <div id="performers-list" style="
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    max-height: 80px; 
+    overflow-y: auto;
+    padding: 5px;
+    background: #fff;
+    display: block;
+  ">
+    ${allMembers.map((m) => {
+      const id = String(memberId(m));
+      const name = m.user?.nickName || m.user?.username || m.email || id;
+      const checked = selectedIds.includes(id) ? "checked" : "";
+      return `
+        <label style="display: flex; align-items: center; gap: 8px; padding: 4px; cursor: pointer; border-bottom: 1px solid #f5f5f5;">
+          <input type="checkbox" class="performer-checkbox" value="${id}" ${checked} />
+          <span style="font-size: 14px; color: #333;">${name}</span>
+        </label>
+      `;
+    }).join("")}
+  </div>
+`;
+
 
     return true;
   })
@@ -495,6 +510,7 @@ evIds.push(
 
   const gantt = window.gantt;
   gantt.config.date_format = "%Y-%m-%d";
+  gantt.config.grid_resize = true; 
 
   gantt.config.columns = [
   { name: "text", label: "Задача", tree: true, width: "*" },
@@ -513,6 +529,10 @@ evIds.push(
   { name: "add", label: "", width: 44 },
 ];
 
+  gantt.config.show_tree_buttons = false;
+
+gantt.templates.grid_folder = function(item) { return ""; };
+gantt.templates.grid_file = function(item) { return ""; };
   gantt.locale.labels.section_description = "Название";
   gantt.locale.labels.section_performers = "Ответственные";
   gantt.locale.labels.section_time = "Время";
@@ -590,6 +610,14 @@ evIds.push(
       setMemberError(error.message || "Не удалось удалить участника");
     }
   };
+  const handleExit = async () => {
+  try {
+    await handleRemoveMember({ id: user?.id });
+    navigate(-1);
+  } catch (error) {
+    console.error("Ошибка при выходе из проекта:", error);
+  }
+};
 
   const handleToggleRole = async (member) => {
   const targetId = memberId(member);
@@ -634,9 +662,26 @@ try {
       }}
     >
       <div>
-        <h1 style={{ margin: "0 0 5px 0" }}>
-          {projectInfo?.name ?? currentProject?.name}
-        </h1>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "12px" }}>
+      <h1 style={{ margin: "0 0 5px 0" }}>
+        {projectInfo?.name ?? currentProject?.name}
+      </h1>
+
+      
+      {projectInfo?.deadLine && (
+        <span style={{ 
+          color: "#d9534f", 
+          fontSize: "14px", 
+          fontWeight: "600",
+          background: "#fdf2f2",
+          padding: "2px 8px",
+          borderRadius: "4px",
+          border: "1px solid #f5c6cb"
+        }}>
+          Срок до: {new Date(projectInfo.deadLine).toLocaleDateString()}
+        </span>
+      )}
+    </div>
         <div style={{ color: "#666" }}>
           Роль:{" "}
           <strong>
@@ -645,36 +690,56 @@ try {
         </div>
       </div>
 
-      {currentProject?.role === "admin" && (
-  <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+    <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+ 
+  <button
+    onClick={() => navigate(-1)}
+    style={{
+      padding: "8px 16px",
+      background: "#6c757d",
+      color: "white",
+      border: "none",
+      borderRadius: "4px",
+      cursor: "pointer",
+    }}
+  >
+    Назад
+  </button>
+
+
+  {currentProject?.role === "admin" ? (
     <button
-      onClick={() => navigate(-1)}
+      onClick={deleteProject}
       style={{
         padding: "8px 16px",
-        background: "#6c757d",
+        background: "#dc3545",
         color: "white",
         border: "none",
         borderRadius: "4px",
         cursor: "pointer",
       }}
     >
-          Назад
-        </button>
-        <button
-          onClick={deleteProject}
-          style={{
-            padding: "8px 16px",
-            background: "#dc3545",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-          }}
-        >
-          Удалить проект
-        </button>
-      </div>
-    )}
+      Удалить проект
+    </button>
+  ) : (
+    <button
+      
+      onClick={handleExit} 
+      style={{
+        padding: "8px 16px",
+        background: "#dc3545",
+        color: "white",
+        border: "none",
+        borderRadius: "4px",
+        cursor: "pointer",
+      }}
+    >
+      Выйти из проекта
+    </button>
+  )}
+</div>
+
+   
 
     </div>
 
@@ -733,7 +798,7 @@ try {
     </div>
 
     {}
-    {currentProject?.role === "admin" && (
+    {currentProject && (
       <div
         style={{
           background: "white",
@@ -742,7 +807,7 @@ try {
         }}
       >
         <h3 style={{ margin: "0 0 15px 0" }}>Участники проекта</h3>
-        {showAddMember && (
+        {currentProject?.role === "admin" && !showAddMember &&  (
           <div style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
             <input
               type="text"
@@ -823,6 +888,7 @@ try {
                     {formattedRole === "admin" ? "Админ" : "Участник"}
                   </span>
                 </div>
+                {currentProject?.role === "admin" && (
                 <div style={{ display: "flex", gap: "8px" }}>
                   <button
                     onClick={() => handleToggleRole(member)}
@@ -856,6 +922,7 @@ try {
                     Удалить
                   </button>
                 </div>
+                )}
               </div>
             );
           })}

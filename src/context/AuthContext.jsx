@@ -4,7 +4,11 @@ import { AUTH_EVENTS } from "../services/apiService.js";
 export const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    const storedUser = localStorage.getItem("user");
+    return storedUser ? JSON.parse(storedUser) : null;
+  });
+  
   const [currentProject, setCurrentProject] = useState(null);
 
   useEffect(() => {

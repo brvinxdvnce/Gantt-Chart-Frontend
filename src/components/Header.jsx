@@ -22,15 +22,6 @@ export default function Header() {
           >
             Диаграммы Ганта
           </h2>
-
-          {currentProject && (
-            <div className="project-info">
-              <span className="project-name">{currentProject.name}</span>
-              <span className={`project-role ${currentProject.role}`}>
-                {currentProject.role === "admin" ? "Админ" : "Участник"}
-              </span>
-            </div>
-          )}
         </div>
 
         <div className="header-right">
