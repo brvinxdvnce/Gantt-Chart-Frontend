@@ -117,6 +117,13 @@ export const userService = {
   getById(userId) {
     return request(`/users/${userId}`);
   },
+  updateProfile(userId, dto) {
+  return request(`/users/${userId}/profile`, { method: "PATCH", body: dto });
+  },
+  updatePassword(userId, dto) {
+  return request(`/users/${userId}/password`, { method: "PATCH", body: dto });
+}
+  
 };
 
 export const projectService = {
